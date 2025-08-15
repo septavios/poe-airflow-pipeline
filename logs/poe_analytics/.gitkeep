@@ -1,0 +1,2 @@
+# This file ensures the poe_analytics directory is tracked by Git
+# while keeping the actual analytics files ignored via .gitignore
