@@ -6,10 +6,11 @@ import requests
 import pandas as pd
 import json
 import os
+import numpy as np
+from typing import Dict, List, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from typing import Dict, List, Any
-
+from decimal import Decimal
 
 # Default arguments for the DAG
 default_args = {
@@ -24,18 +25,19 @@ default_args = {
 
 # DAG definition
 dag = DAG(
-    'poe_data_extraction',
+    'poe_unified_pipeline',
     default_args=default_args,
-    description='Extract Path of Exile economic data from poe.ninja API',
+    description='Unified Path of Exile data extraction and transformation pipeline',
     schedule=timedelta(hours=6),  # Run every 6 hours
     catchup=False,
-    tags=['poe', 'gaming', 'economics', 'data_science'],
+    tags=['poe', 'gaming', 'economics', 'data_science', 'unified'],
 )
 
 # Configuration
 LEAGUE = 'Settlers'  # Current league - update as needed
 BASE_URL = 'https://poe.ninja/api/data'
 DATA_DIR = '/opt/airflow/logs/poe_data'  # Store data in logs directory
+OUTPUT_DIR = '/opt/airflow/logs/poe_analytics'
 
 # Database configuration
 DB_CONFIG = {
@@ -50,12 +52,6 @@ def get_db_connection():
     """Create a database connection"""
     return psycopg2.connect(**DB_CONFIG)
 
-
-
-
-
-
-
 def log_extraction(extraction_type: str, status: str, record_count: int = 0, error_message: str = None):
     """Log extraction activity to database"""
     try:
@@ -69,10 +65,28 @@ def log_extraction(extraction_type: str, status: str, record_count: int = 0, err
     except Exception as e:
         print(f"Error logging extraction: {str(e)}")
 
-def create_data_directory():
-    """Create directory for storing extracted data"""
+def log_transformation(transformation_type: str, records_processed: int, status: str = 'success', error_message: str = None):
+    """Log transformation activity to database"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO poe_extraction_log (extraction_type, status, records_processed, error_message, extracted_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (f"transform_{transformation_type}", status, records_processed, error_message, datetime.now()))
+                conn.commit()
+    except Exception as e:
+        print(f"Failed to log transformation: {e}")
+
+def create_directories():
+    """Create directories for storing extracted and transformed data"""
     os.makedirs(DATA_DIR, exist_ok=True)
-    print(f"Data directory created: {DATA_DIR}")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    print(f"Directories created: {DATA_DIR}, {OUTPUT_DIR}")
+
+# ============================================================================
+# EXTRACTION FUNCTIONS
+# ============================================================================
 
 def fetch_currency_data(**context) -> Dict[str, Any]:
     """Fetch currency exchange rates from poe.ninja and insert into database"""
@@ -120,7 +134,6 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                         item['low_confidence'],
                         datetime.now()
                     ))
-            
             conn.commit()
         
         # Also save to file for backup
@@ -196,7 +209,6 @@ def fetch_skill_gems_data(**context) -> Dict[str, Any]:
                         item['low_confidence'],
                         datetime.now()
                     ))
-            
             conn.commit()
         
         # Also save to file for backup
@@ -264,7 +276,6 @@ def fetch_divination_cards_data(**context) -> Dict[str, Any]:
                         item['low_confidence'],
                         datetime.now()
                     ))
-            
             conn.commit()
         
         # Also save to file for backup
@@ -353,7 +364,6 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
                         item['corrupted'],
                         datetime.now()
                     ))
-            
             conn.commit()
         
         # Also save to file for backup
@@ -370,65 +380,191 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
         print(f"Error saving unique items data: {str(e)}")
         raise
 
-def calculate_profit_opportunities(**context) -> Dict[str, Any]:
-    """Calculate potential profit opportunities based on database data and insert results"""
+# ============================================================================
+# TRANSFORMATION FUNCTIONS
+# ============================================================================
+
+def transform_currency_data(**context) -> Dict[str, Any]:
+    """Transform currency data for market analysis"""
     try:
-        # Get latest data from database
+        # Load currency data from database
         with get_db_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Get latest currency data
+            df = pd.read_sql_query("""
+                SELECT currency_name, chaos_value, listing_count, extracted_at
+                FROM poe_currency_data 
+                WHERE extracted_at >= NOW() - INTERVAL '2 hours'
+                ORDER BY extracted_at DESC
+            """, conn)
+        
+        if df.empty:
+            print("No recent currency data found in database")
+            log_transformation('currency', 0, 'error', 'No recent data found')
+            return {'records': 0}
+        
+        # Clean and transform data
+        df['chaos_value'] = pd.to_numeric(df['chaos_value'], errors='coerce')
+        df['listing_count'] = pd.to_numeric(df['listing_count'], errors='coerce')
+        
+        # Remove rows with invalid data
+        df = df.dropna(subset=['chaos_value', 'listing_count'])
+        df = df[df['chaos_value'] > 0]
+        
+        # Calculate market metrics
+        df['market_cap'] = df['chaos_value'] * df['listing_count']
+        df['liquidity_score'] = np.log1p(df['listing_count']) * df['chaos_value']
+        
+        # Categorize currencies
+        def categorize_currency(name):
+            if not name:
+                return 'Unknown'
+            name_lower = name.lower()
+            if 'divine' in name_lower:
+                return 'Premium'
+            elif any(x in name_lower for x in ['exalted', 'ancient', 'eternal']):
+                return 'High-Tier'
+            elif any(x in name_lower for x in ['chaos', 'alchemy', 'fusing', 'chromatic']):
+                return 'Mid-Tier'
+            else:
+                return 'Low-Tier'
+        
+        df['currency_tier'] = df['currency_name'].apply(categorize_currency)
+        
+        # Create summary statistics
+        summary_stats = {
+            'total_currencies': len(df),
+            'total_market_cap': float(df['market_cap'].sum()),
+            'avg_chaos_value': float(df['chaos_value'].mean()),
+            'median_chaos_value': float(df['chaos_value'].median()),
+            'most_valuable': df.loc[df['chaos_value'].idxmax(), 'currency_name'] if not df.empty else None,
+            'most_liquid': df.loc[df['listing_count'].idxmax(), 'currency_name'] if not df.empty else None,
+            'tier_distribution': df['currency_tier'].value_counts().to_dict(),
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Insert market summary into database
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT * FROM poe_currency_data 
-                    WHERE extracted_at >= NOW() - INTERVAL '1 hour'
-                    ORDER BY extracted_at DESC
-                """)
-                currency_data = cur.fetchall()
-                
-                # Get latest gems data
-                cur.execute("""
-                    SELECT * FROM poe_skill_gems_data 
-                    WHERE extracted_at >= NOW() - INTERVAL '1 hour'
-                    ORDER BY extracted_at DESC
-                """)
-                gems_data = cur.fetchall()
+                    INSERT INTO poe_market_summary (
+                        summary_date, total_currencies, avg_currency_chaos_value,
+                        high_value_currencies, most_liquid_currency, summary_data, extracted_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    datetime.now().date(),
+                    summary_stats['total_currencies'],
+                    summary_stats['avg_chaos_value'],
+                    len(df[df['chaos_value'] > 100]),
+                    df.loc[df['listing_count'].idxmax(), 'currency_name'] if not df.empty else None,
+                    json.dumps(summary_stats),
+                    datetime.now()
+                ))
+                conn.commit()
         
-        if not currency_data or not gems_data:
-            print("No recent data found for profit calculation")
-            return {'status': 'no_data'}
+        # Save backup files
+        output_file = f"{OUTPUT_DIR}/currency_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        analysis_data = {
+            'summary_stats': summary_stats,
+            'top_10_by_value': df.nlargest(10, 'chaos_value')[['currency_name', 'chaos_value', 'listing_count']].to_dict('records'),
+            'top_10_by_liquidity': df.nlargest(10, 'listing_count')[['currency_name', 'chaos_value', 'listing_count']].to_dict('records')
+        }
         
-        # Calculate profit opportunities for gems
-        profitable_gems = []
-        for gem in gems_data:
-            if gem['chaos_value'] > 0 and gem['listing_count'] >= 10:
-                # Simple profit calculation based on gem level and quality
-                base_value = gem['chaos_value']
-                gem_level = gem['gem_level'] or 1
-                gem_quality = gem['gem_quality'] or 0
-                
-                # Estimate leveling profit (simplified)
-                if gem_level < 20 and not gem['corrupted']:
-                    base_value_float = float(base_value)
-                    potential_profit = base_value_float * 0.5  # 50% profit assumption
-                    profit_data = {
-                        'item_name': gem['gem_name'],
-                        'item_type': 'skill_gem',
-                        'current_value': base_value_float,
-                        'potential_profit': potential_profit,
-                        'profit_percentage': (potential_profit / base_value_float) * 100,
-                        'confidence_score': min(gem['listing_count'] / 50.0, 1.0),  # Confidence based on listings
-                        'analysis_details': json.dumps({
-                            'gem_level': gem_level,
-                            'gem_quality': gem_quality,
-                            'listing_count': gem['listing_count'],
-                            'strategy': 'gem_leveling'
-                        }),
-                        'league': LEAGUE,
-                        'timestamp': datetime.now()
-                    }
-                    profitable_gems.append(profit_data)
+        with open(output_file, 'w') as f:
+            json.dump(analysis_data, f, indent=2)
         
-        # Sort by profit percentage
-        profitable_gems.sort(key=lambda x: x['profit_percentage'], reverse=True)
+        log_transformation('currency', len(df))
+        print(f"Currency analysis saved to database and backup files: {output_file}")
+        return {'json_file': output_file, 'records': len(df)}
+        
+    except Exception as e:
+        error_msg = f"Error transforming currency data: {str(e)}"
+        print(error_msg)
+        log_transformation('currency', 0, 'error', str(e))
+        raise
+
+def transform_gems_data(**context) -> Dict[str, Any]:
+    """Transform skill gems data for profit analysis"""
+    try:
+        # Load gems data from database
+        with get_db_connection() as conn:
+            df = pd.read_sql_query("""
+                SELECT gem_name, chaos_value, divine_value, gem_level, gem_quality, 
+                       listing_count, corrupted, extracted_at
+                FROM poe_skill_gems_data 
+                WHERE extracted_at >= NOW() - INTERVAL '2 hours'
+                ORDER BY extracted_at DESC
+            """, conn)
+        
+        if df.empty:
+            print("No recent gems data found in database")
+            log_transformation('gems', 0, 'error', 'No recent data found')
+            return {'records': 0}
+        
+        # Clean and transform data
+        df['chaos_value'] = pd.to_numeric(df['chaos_value'], errors='coerce')
+        df['divine_value'] = pd.to_numeric(df['divine_value'], errors='coerce')
+        df['gem_level'] = pd.to_numeric(df['gem_level'], errors='coerce')
+        df['gem_quality'] = pd.to_numeric(df['gem_quality'], errors='coerce')
+        df['listing_count'] = pd.to_numeric(df['listing_count'], errors='coerce')
+        
+        # Calculate profit metrics
+        df['is_max_level'] = df['gem_level'] == 20
+        df['is_quality'] = df['gem_quality'] > 0
+        df['is_corrupted'] = df['corrupted'].fillna(False)
+        
+        # Estimate leveling profit potential
+        def calculate_leveling_profit(row):
+            if pd.isna(row['chaos_value']) or row['chaos_value'] <= 0:
+                return 0
+            
+            base_value = row['chaos_value']
+            gem_level = row['gem_level'] if not pd.isna(row['gem_level']) else 1
+            
+            # Simple profit model: higher level gems are worth more
+            if gem_level < 20 and not row['is_corrupted']:
+                # Estimate profit based on level difference
+                level_multiplier = (20 - gem_level) * 0.1  # 10% per level
+                return base_value * level_multiplier
+            return 0
+        
+        df['estimated_leveling_profit'] = df.apply(calculate_leveling_profit, axis=1)
+        df['profit_margin_percent'] = np.where(df['chaos_value'] > 0, 
+                                             (df['estimated_leveling_profit'] / df['chaos_value']) * 100, 0)
+        
+        # Categorize gems
+        def categorize_gem(name):
+            if not name:
+                return 'Unknown'
+            name_lower = name.lower()
+            if 'awakened' in name_lower:
+                return 'Awakened'
+            elif 'support' in name_lower:
+                return 'Support'
+            elif any(x in name_lower for x in ['aura', 'herald', 'banner']):
+                return 'Aura/Herald'
+            elif any(x in name_lower for x in ['curse', 'mark']):
+                return 'Curse'
+            else:
+                return 'Active Skill'
+        
+        df['gem_category'] = df['gem_name'].apply(categorize_gem)
+        
+        # Create summary statistics
+        summary_stats = {
+            'total_gems': len(df),
+            'avg_chaos_value': float(df['chaos_value'].mean()),
+            'profitable_gems': len(df[df['estimated_leveling_profit'] > 0]),
+            'high_profit_gems': len(df[df['profit_margin_percent'] > 50]),
+            'awakened_gems': len(df[df['gem_category'] == 'Awakened']),
+            'corrupted_gems': len(df[df['is_corrupted']]),
+            'max_level_gems': len(df[df['is_max_level']]),
+            'category_distribution': df['gem_category'].value_counts().to_dict(),
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Identify top profit opportunities
+        profitable_gems = df[df['estimated_leveling_profit'] > 0].copy()
+        profitable_gems = profitable_gems.sort_values('profit_margin_percent', ascending=False)
         
         # Insert profit opportunities into database
         with get_db_connection() as conn:
@@ -437,85 +573,176 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
                 cur.execute("DELETE FROM poe_profit_opportunities WHERE extracted_at < NOW() - INTERVAL '1 day'")
                 
                 # Insert new opportunities
-                for opportunity in profitable_gems:
+                for _, opportunity in profitable_gems.head(50).iterrows():
                     cur.execute("""
                         INSERT INTO poe_profit_opportunities 
                         (opportunity_type, item_name, item_variant, current_chaos_value, 
                          profit_percentage, confidence_score, analysis_data, extracted_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
-                        opportunity.get('item_type', 'gem'),
-                        opportunity['item_name'],
-                        opportunity.get('item_variant'),
-                        opportunity['current_value'],
-                        opportunity['profit_percentage'],
-                        opportunity['confidence_score'],
-                        json.dumps(opportunity.get('analysis_details', {})),
+                        'gem',
+                        opportunity['gem_name'],
+                        opportunity.get('variant'),
+                        float(opportunity['chaos_value']),
+                        float(opportunity['profit_margin_percent']),
+                        min(float(opportunity['listing_count']) / 50.0, 1.0),
+                        json.dumps({
+                            'gem_level': int(opportunity['gem_level']) if not pd.isna(opportunity['gem_level']) else None,
+                            'gem_quality': int(opportunity['gem_quality']) if not pd.isna(opportunity['gem_quality']) else None,
+                            'listing_count': int(opportunity['listing_count']) if not pd.isna(opportunity['listing_count']) else None,
+                            'strategy': 'gem_leveling'
+                        }),
                         datetime.now()
                     ))
                 conn.commit()
         
-        # Also save to file for backup
+        # Save backup files
+        output_file = f"{OUTPUT_DIR}/gems_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         analysis_data = {
-            'analysis_timestamp': datetime.now().isoformat(),
-            'league': LEAGUE,
-            'total_gems_analyzed': len(gems_data),
-            'profitable_opportunities': len(profitable_gems),
-            'top_profitable_gems': profitable_gems[:20],  # Top 20
-            'currency_rates': {item['currency_name']: item['chaos_value'] 
-                             for item in currency_data if item['currency_name']}
+            'summary_stats': summary_stats,
+            'top_profit_opportunities': profitable_gems.head(20)[[
+                'gem_name', 'chaos_value', 'estimated_leveling_profit', 'profit_margin_percent',
+                'gem_level', 'gem_quality', 'listing_count', 'gem_category'
+            ]].to_dict('records')
         }
         
-        filename = f"{DATA_DIR}/profit_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, 'w') as f:
-            json.dump(analysis_data, f, indent=2, default=str)
+        with open(output_file, 'w') as f:
+            json.dump(analysis_data, f, indent=2)
         
-        log_extraction('profit_opportunities', 'success', len(profitable_gems))
-        print(f"Profit analysis saved: {len(profitable_gems)} opportunities to database and {filename}")
-        return {'filename': filename, 'opportunities': len(profitable_gems)}
+        log_transformation('gems', len(df))
+        print(f"Gems analysis saved to database and backup files: {output_file}")
+        return {'json_file': output_file, 'records': len(df)}
         
     except Exception as e:
-        log_extraction('profit_opportunities', 'error', 0, str(e))
-        print(f"Error calculating profit opportunities: {str(e)}")
+        error_msg = f"Error transforming gems data: {str(e)}"
+        print(error_msg)
+        log_transformation('gems', 0, 'error', str(e))
         raise
 
-# Task definitions
-create_directory_task = PythonOperator(
-    task_id='create_data_directory',
-    python_callable=create_data_directory,
+def create_market_summary(**context) -> Dict[str, Any]:
+    """Create comprehensive market summary from all data sources"""
+    try:
+        # Get latest data from database
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Get profit opportunities
+                cur.execute("""
+                    SELECT item_name, current_chaos_value, profit_percentage, confidence_score
+                    FROM poe_profit_opportunities 
+                    WHERE extracted_at >= NOW() - INTERVAL '2 hours'
+                    ORDER BY profit_percentage DESC
+                    LIMIT 10
+                """)
+                top_opportunities = cur.fetchall()
+                
+                # Get market summary stats
+                cur.execute("""
+                    SELECT COUNT(*) as total_records, 
+                           AVG(avg_currency_chaos_value) as avg_currency_value,
+                           AVG(avg_gem_chaos_value) as avg_gem_value
+                    FROM poe_market_summary 
+                    WHERE created_at >= NOW() - INTERVAL '2 hours'
+                """)
+                market_stats = cur.fetchone()
+        
+        # Convert Decimal objects to float for JSON serialization
+        def convert_decimals(data):
+            if isinstance(data, dict):
+                return {k: convert_decimals(v) for k, v in data.items()}
+            elif isinstance(data, list):
+                return [convert_decimals(item) for item in data]
+            elif isinstance(data, Decimal):
+                return float(data)
+            return data
+        
+        market_summary = {
+            'timestamp': datetime.now().isoformat(),
+            'top_profit_opportunities': convert_decimals([dict(row) for row in top_opportunities]),
+            'market_stats': convert_decimals(dict(market_stats) if market_stats else {}),
+            'data_freshness': 'last_2_hours'
+        }
+        
+        # Save comprehensive summary
+        output_file = f"{OUTPUT_DIR}/market_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(output_file, 'w') as f:
+            json.dump(market_summary, f, indent=2)
+        
+        log_transformation('market_summary', len(top_opportunities))
+        print(f"Market summary created: {output_file}")
+        return {'summary_file': output_file, 'opportunities_count': len(top_opportunities)}
+        
+    except Exception as e:
+        error_msg = f"Error creating market summary: {str(e)}"
+        print(error_msg)
+        log_transformation('market_summary', 0, 'error', str(e))
+        raise
+
+# ============================================================================
+# TASK DEFINITIONS
+# ============================================================================
+
+# Setup task
+setup_task = PythonOperator(
+    task_id='setup_directories',
+    python_callable=create_directories,
     dag=dag,
 )
 
-fetch_currency_task = PythonOperator(
-    task_id='fetch_currency_data',
+# Extraction tasks
+extract_currency_task = PythonOperator(
+    task_id='extract_currency_data',
     python_callable=fetch_currency_data,
     dag=dag,
 )
 
-fetch_gems_task = PythonOperator(
-    task_id='fetch_skill_gems_data',
+extract_gems_task = PythonOperator(
+    task_id='extract_skill_gems_data',
     python_callable=fetch_skill_gems_data,
     dag=dag,
 )
 
-fetch_cards_task = PythonOperator(
-    task_id='fetch_divination_cards_data',
+extract_cards_task = PythonOperator(
+    task_id='extract_divination_cards_data',
     python_callable=fetch_divination_cards_data,
     dag=dag,
 )
 
-fetch_uniques_task = PythonOperator(
-    task_id='fetch_unique_items_data',
+extract_items_task = PythonOperator(
+    task_id='extract_unique_items_data',
     python_callable=fetch_unique_items_data,
     dag=dag,
 )
 
-calculate_profits_task = PythonOperator(
-    task_id='calculate_profit_opportunities',
-    python_callable=calculate_profit_opportunities,
+# Transformation tasks
+transform_currency_task = PythonOperator(
+    task_id='transform_currency_data',
+    python_callable=transform_currency_data,
     dag=dag,
 )
 
-# Task dependencies
-create_directory_task >> [fetch_currency_task, fetch_gems_task, fetch_cards_task, fetch_uniques_task]
-[fetch_currency_task, fetch_gems_task] >> calculate_profits_task
+transform_gems_task = PythonOperator(
+    task_id='transform_gems_data',
+    python_callable=transform_gems_data,
+    dag=dag,
+)
+
+# Final summary task
+market_summary_task = PythonOperator(
+    task_id='create_market_summary',
+    python_callable=create_market_summary,
+    dag=dag,
+)
+
+# ============================================================================
+# TASK DEPENDENCIES
+# ============================================================================
+
+# Setup must run first
+setup_task >> [extract_currency_task, extract_gems_task, extract_cards_task, extract_items_task]
+
+# Transformation tasks depend on their respective extraction tasks
+extract_currency_task >> transform_currency_task
+extract_gems_task >> transform_gems_task
+
+# Market summary depends on all transformation tasks
+[transform_currency_task, transform_gems_task] >> market_summary_task

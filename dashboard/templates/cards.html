@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Divination Cards Data - POE Market Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-id-card text-info"></i> 
+            Divination Cards Data
+        </h1>
+    </div>
+</div>
+
+<!-- Search Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" class="d-flex">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control" 
+                               name="search" 
+                               value="{{ search }}" 
+                               placeholder="Search divination cards by name...">
+                        <button class="btn btn-primary" type="submit">
+                            Search
+                        </button>
+                        {% if search %}
+                        <a href="/cards" class="btn btn-outline-secondary">
+                            Clear
+                        </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="fas fa-table"></i> 
+                    Divination Cards (Last 24 Hours)
+                    {% if search %}
+                        - Search: "{{ search }}"
+                    {% endif %}
+                </span>
+                <span class="badge bg-light text-dark">{{ cards_data|length }} items</span>
+            </div>
+            <div class="card-body">
+                {% if cards_data %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Card Name</th>
+                                <th>Chaos Value</th>
+                                <th>Divine Value</th>
+                                <th>Count</th>
+                                <th>Listings</th>
+                                <th>Confidence</th>
+                                <th>Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for card in cards_data %}
+                            <tr {% if card.low_confidence %}class="low-confidence"{% endif %}>
+                                <td>
+                                    <strong>{{ card.card_name }}</strong>
+                                    {% if card.low_confidence %}
+                                        <i class="fas fa-exclamation-triangle text-warning ms-1" title="Low Confidence"></i>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if card.chaos_value %}
+                                        <span class="badge bg-warning text-dark fs-6">
+                                            {{ "%.2f"|format(card.chaos_value) }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if card.divine_value %}
+                                        <span class="badge bg-info fs-6">
+                                            {{ "%.2f"|format(card.divine_value) }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ card.count or 'N/A' }}</td>
+                                <td>
+                                    {% if card.listing_count %}
+                                        <span class="badge bg-secondary">{{ card.listing_count }}</span>
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if card.low_confidence %}
+                                        <span class="badge bg-warning">Low</span>
+                                    {% else %}
+                                        <span class="badge bg-success">High</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ card.extracted_at[:19] if card.extracted_at else 'Unknown' }}
+                                    </small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    {% if search %}
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">No Cards Found</h4>
+                        <p class="text-muted">No divination cards match your search criteria: "{{ search }}"</p>
+                        <a href="/cards" class="btn btn-primary">View All Cards</a>
+                    {% else %}
+                        <i class="fas fa-exclamation-circle fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">No Divination Cards Data Available</h4>
+                        <p class="text-muted">Divination cards data will appear here once the extraction DAG runs successfully.</p>
+                        <a href="/" class="btn btn-primary">Back to Dashboard</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+{% if cards_data %}
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">
+                    {% if search %}Found Cards{% else %}Total Cards{% endif %}
+                </h5>
+                <h2 class="text-primary">{{ cards_data|length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Highest Chaos Value</h5>
+                <h2 class="text-success">
+                    {{ "%.2f"|format(cards_data[0].chaos_value) if cards_data and cards_data[0].chaos_value else '0' }}
+                </h2>
+                <small class="text-muted">{{ cards_data[0].card_name if cards_data else 'N/A' }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Average Chaos Value</h5>
+                <h2 class="text-info">
+                    {% set valid_cards = cards_data|selectattr('chaos_value')|list %}
+                    {% if valid_cards %}
+                        {% set avg = (valid_cards|sum(attribute='chaos_value') / valid_cards|length) %}
+                        {{ "%.2f"|format(avg) }}
+                    {% else %}
+                        0.00
+                    {% endif %}
+                </h2>
+                <small class="text-muted">Chaos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Low Confidence</h5>
+                <h2 class="text-warning">
+                    {{ cards_data|selectattr('low_confidence')|list|length }}
+                </h2>
+                <small class="text-muted">Cards</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Value Cards -->
+{% if cards_data %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-trophy"></i> Top 10 Most Valuable Cards
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for card in cards_data[:10] %}
+                    {% if card.chaos_value %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card border-left-primary">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>{{ card.card_name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ card.listing_count or 0 }} listings</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-warning text-dark">
+                                            {{ "%.2f"|format(card.chaos_value) }}c
+                                        </span>
+                                        {% if card.divine_value %}
+                                        <br>
+                                        <span class="badge bg-info">
+                                            {{ "%.2f"|format(card.divine_value) }}d
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-focus search input
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.querySelector('input[name="search"]');
+    if (searchInput && !searchInput.value) {
+        searchInput.focus();
+    }
+});
+</script>
+{% endblock %}

@@ -98,13 +98,13 @@ def initialize_database():
         
         # Verify tables were created
         tables_to_check = [
-            'currency_data',
-            'skill_gems_data', 
-            'divination_cards_data',
-            'unique_items_data',
-            'market_summary',
-            'profit_opportunities',
-            'extraction_log'
+            'poe_currency_data',
+            'poe_skill_gems_data', 
+            'poe_divination_cards_data',
+            'poe_unique_items_data',
+            'poe_market_summary',
+            'poe_profit_opportunities',
+            'poe_extraction_log'
         ]
         
         logger.info("Verifying table creation...")
@@ -145,13 +145,13 @@ def reset_database():
         
         # Drop all tables
         tables_to_drop = [
-            'extraction_log',
-            'profit_opportunities', 
-            'market_summary',
-            'unique_items_data',
-            'divination_cards_data',
-            'skill_gems_data',
-            'currency_data'
+            'poe_extraction_log',
+            'poe_profit_opportunities', 
+            'poe_market_summary',
+            'poe_unique_items_data',
+            'poe_divination_cards_data',
+            'poe_skill_gems_data',
+            'poe_currency_data'
         ]
         
         for table in tables_to_drop:
@@ -181,13 +181,13 @@ def show_database_status():
         conn = create_database_connection()
         
         tables = [
-            'currency_data',
-            'skill_gems_data',
-            'divination_cards_data', 
-            'unique_items_data',
-            'market_summary',
-            'profit_opportunities',
-            'extraction_log'
+            'poe_currency_data',
+            'poe_skill_gems_data',
+            'poe_divination_cards_data', 
+            'poe_unique_items_data',
+            'poe_market_summary',
+            'poe_profit_opportunities',
+            'poe_extraction_log'
         ]
         
         logger.info("Database Status:")

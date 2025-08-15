@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Profit Opportunities - POE Market Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-chart-line text-warning"></i> 
+            Profit Opportunities
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-table"></i> Top Profit Opportunities (Last 24 Hours)</span>
+                <span class="badge bg-light text-dark">{{ profit_data|length }} opportunities</span>
+            </div>
+            <div class="card-body">
+                {% if profit_data %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Item Name</th>
+                                <th>Type</th>
+                                <th>Current Value</th>
+                                <th>Historical Avg</th>
+                                <th>Profit %</th>
+                                <th>Confidence</th>
+                                <th>Recommendation</th>
+                                <th>Risk Level</th>
+                                <th>Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in profit_data %}
+                            <tr>
+                                <td>
+                                    <strong>{{ item.item_name }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ item.opportunity_type }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary fs-6">
+                                        {{ "%.2f"|format(item.current_chaos_value) if item.current_chaos_value else "N/A" }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info fs-6">
+                                        {{ "%.2f"|format(item.historical_avg_chaos_value) if item.historical_avg_chaos_value else "N/A" }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if item.profit_percentage > 0 %}
+                                        <span class="profit-positive fs-5">
+                                            +{{ "%.1f"|format(item.profit_percentage) }}%
+                                        </span>
+                                    {% else %}
+                                        <span class="profit-negative fs-5">
+                                            {{ "%.1f"|format(item.profit_percentage) }}%
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning">
+                                        {{ "%.1f"|format(item.confidence_score * 100) if item.confidence_score else "N/A" }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if item.recommendation == 'BUY' else 'danger' if item.recommendation == 'SELL' else 'secondary' }}">
+                                        {{ item.recommendation }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if item.risk_level == 'LOW' else 'warning' if item.risk_level == 'MEDIUM' else 'danger' }}">
+                                        {{ item.risk_level }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ item.extracted_at[:19] if item.extracted_at else 'Unknown' }}
+                                    </small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-exclamation-circle fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No Profit Opportunities Available</h4>
+                    <p class="text-muted">Profit opportunities will appear here once the extraction DAG calculates them.</p>
+                    <a href="/" class="btn btn-primary">Back to Dashboard</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+{% if profit_data %}
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Opportunities</h5>
+                <h2 class="text-primary">{{ profit_data|length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Best Profit %</h5>
+                <h2 class="text-success">
+                    {{ "%.1f"|format(profit_data[0].profit_percentage) if profit_data else '0' }}%
+                </h2>
+                <small class="text-muted">{{ profit_data[0].item_name if profit_data else 'N/A' }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Average Profit %</h5>
+                <h2 class="text-info">
+                    {% set avg_profit = (profit_data|sum(attribute='profit_percentage') / profit_data|length) if profit_data else 0 %}
+                    {{ "%.1f"|format(avg_profit) }}%
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Profitable Items</h5>
+                <h2 class="text-warning">
+                    {{ profit_data|selectattr('profit_percentage', '>', 0)|list|length }}
+                </h2>
+                <small class="text-muted">Items with positive profit</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Opportunities by Category -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-gem"></i> Top Skill Gem Opportunities
+            </div>
+            <div class="card-body">
+                {% set gem_opportunities = profit_data|selectattr('item_type', 'equalto', 'skill_gem')|list %}
+                {% if gem_opportunities %}
+                    {% for item in gem_opportunities[:5] %}
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                        <div>
+                            <strong>{{ item.item_name }}</strong>
+                            <br>
+                            <small class="text-muted">{{ "%.2f"|format(item.current_chaos_value) }}c current</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="profit-positive">
+                                +{{ "%.1f"|format(item.profit_percentage) }}%
+                            </span>
+                            <br>
+                            <small class="text-success">
+                                +{{ "%.2f"|format(item.profit_chaos) }}c
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted text-center">No skill gem opportunities available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-id-card"></i> Top Divination Card Opportunities
+            </div>
+            <div class="card-body">
+                {% set card_opportunities = profit_data|selectattr('item_type', 'equalto', 'divination_card')|list %}
+                {% if card_opportunities %}
+                    {% for item in card_opportunities[:5] %}
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                        <div>
+                            <strong>{{ item.item_name }}</strong>
+                            <br>
+                            <small class="text-muted">{{ "%.2f"|format(item.current_chaos_value) }}c current</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="profit-positive">
+                                +{{ "%.1f"|format(item.profit_percentage) }}%
+                            </span>
+                            <br>
+                            <small class="text-success">
+                                +{{ "%.2f"|format(item.profit_chaos) }}c
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted text-center">No divination card opportunities available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Profit Distribution Chart -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-chart-pie"></i> Profit Distribution by Item Type
+            </div>
+            <div class="card-body">
+                <canvas id="profitDistributionChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if profit_data %}
+<script>
+// Profit Distribution Chart
+document.addEventListener('DOMContentLoaded', function() {
+    const profitData = {{ profit_data|tojson }};
+    
+    // Group by item type
+    const typeGroups = {};
+    profitData.forEach(function(item) {
+        if (!typeGroups[item.item_type]) {
+            typeGroups[item.item_type] = [];
+        }
+        typeGroups[item.item_type].push(item);
+    });
+    
+    // Calculate average profit percentage by type
+    const chartData = {
+        labels: [],
+        datasets: [{
+            label: 'Average Profit %',
+            data: [],
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 205, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+            ],
+            borderColor: [
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 205, 86, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(153, 102, 255, 1)'
+            ],
+            borderWidth: 1
+        }]
+    };
+    
+    Object.keys(typeGroups).forEach(function(type) {
+        const items = typeGroups[type];
+        const avgProfit = items.reduce(function(sum, item) {
+            return sum + item.profit_percentage;
+        }, 0) / items.length;
+        
+        chartData.labels.push(type.replace('_', ' ').toUpperCase());
+        chartData.datasets[0].data.push(avgProfit.toFixed(1));
+    });
+    
+    const ctx = document.getElementById('profitDistributionChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.parsed + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

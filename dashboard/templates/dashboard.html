@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}POE Market Dashboard - Overview{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-chart-line text-primary"></i> 
+            POE Market Data Overview
+        </h1>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row">
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-number">{{ stats.currency_count }}</div>
+            <div>Currency Items</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-number">{{ stats.gems_count }}</div>
+            <div>Skill Gems</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-number">{{ stats.cards_count }}</div>
+            <div>Divination Cards</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-number">{{ stats.profit_count }}</div>
+            <div>Profit Opportunities</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-number">{{ stats.summary_count }}</div>
+            <div>Market Summaries</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div style="font-size: 1rem; font-weight: bold;">
+                {% if stats.last_update != 'Never' %}
+                    {{ stats.last_update[:19] }}
+                {% else %}
+                    Never
+                {% endif %}
+            </div>
+            <div>Last Update</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-coins"></i> Top Currency Values (Chaos Equivalent)
+            </div>
+            <div class="card-body">
+                <canvas id="currencyChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-chart-line"></i> Top Profit Opportunities (%)
+            </div>
+            <div class="card-body">
+                <canvas id="profitChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Links -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-link"></i> Quick Access
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2">
+                        <a href="/currency" class="btn btn-outline-primary btn-lg w-100 mb-2">
+                            <i class="fas fa-coins"></i><br>
+                            Currency Data
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/gems" class="btn btn-outline-success btn-lg w-100 mb-2">
+                            <i class="fas fa-gem"></i><br>
+                            Skill Gems
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/cards" class="btn btn-outline-info btn-lg w-100 mb-2">
+                            <i class="fas fa-id-card"></i><br>
+                            Divination Cards
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/profit" class="btn btn-outline-warning btn-lg w-100 mb-2">
+                            <i class="fas fa-chart-line"></i><br>
+                            Profit Opportunities
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/market-summary" class="btn btn-outline-secondary btn-lg w-100 mb-2">
+                            <i class="fas fa-chart-bar"></i><br>
+                            Market Summary
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="http://localhost:8080" target="_blank" class="btn btn-outline-dark btn-lg w-100 mb-2">
+                            <i class="fas fa-cogs"></i><br>
+                            Airflow UI
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Currency Chart
+fetch('/api/currency-chart')
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('currencyChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(item => item.currency_type_name),
+                datasets: [{
+                    label: 'Chaos Equivalent',
+                    data: data.map(item => item.chaos_equivalent),
+                    backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    })
+    .catch(error => {
+        console.error('Error loading currency chart:', error);
+        document.getElementById('currencyChart').parentElement.innerHTML = 
+            '<p class="text-muted text-center">No currency data available</p>';
+    });
+
+// Profit Chart
+fetch('/api/profit-chart')
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('profitChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(item => item.item_name.length > 20 ? 
+                    item.item_name.substring(0, 20) + '...' : item.item_name),
+                datasets: [{
+                    label: 'Profit Percentage',
+                    data: data.map(item => item.profit_percentage),
+                    backgroundColor: 'rgba(245, 87, 108, 0.8)',
+                    borderColor: 'rgba(245, 87, 108, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                scales: {
+                    x: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    })
+    .catch(error => {
+        console.error('Error loading profit chart:', error);
+        document.getElementById('profitChart').parentElement.innerHTML = 
+            '<p class="text-muted text-center">No profit data available</p>';
+    });
+</script>
+{% endblock %}

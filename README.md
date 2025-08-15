@@ -28,9 +28,9 @@ This project provides an automated data pipeline that:
 
 ### Components
 
-- **Data Extraction DAG**: Fetches currency, skill gems, divination cards, and unique items data
-- **Data Transformation DAG**: Processes and analyzes the extracted data
+- **Unified Pipeline DAG**: Single DAG that handles both data extraction and transformation in sequence
 - **PostgreSQL Database**: Stores all market data with proper indexing
+- **Web Dashboard**: Flask-based dashboard for data visualization and monitoring
 - **Jupyter Notebooks**: Interactive data analysis and visualization
 - **Docker Compose**: Containerized deployment with all services
 
@@ -101,6 +101,7 @@ The pipeline extracts data from poe.ninja API endpoints:
 
 5. **Access the services**
    - Airflow UI: http://localhost:8080 (admin/admin)
+   - Web Dashboard: http://localhost:5001
    - Jupyter: http://localhost:8888
    - PostgreSQL: localhost:5432
 
@@ -109,8 +110,7 @@ The pipeline extracts data from poe.ninja API endpoints:
 ```
 POE_Airflow/
 ├── dags/                          # Airflow DAG definitions
-│   ├── poe_data_extraction_dag.py # Data extraction pipeline
-│   └── poe_data_transformation_dag.py # Data transformation pipeline
+│   └── poe_unified_pipeline_dag.py # Unified data extraction and transformation pipeline
 ├── sql/                           # Database schemas and scripts
 │   └── init_database.sql         # Database initialization
 ├── scripts/                       # Utility scripts
@@ -119,6 +119,10 @@ POE_Airflow/
 │   └── poe_market_analysis.ipynb # Market analysis notebook
 ├── config/                        # Configuration files
 │   └── airflow.cfg               # Airflow configuration
+├── dashboard/                     # Web dashboard application
+│   ├── app.py                    # Flask application
+│   ├── templates/                # HTML templates
+│   └── requirements.txt          # Dashboard dependencies
 ├── logs/                          # Application logs and data
 │   ├── poe_data/                 # Raw extracted data
 │   └── poe_analytics/            # Processed analytics
@@ -157,6 +161,11 @@ AIRFLOW__CORE__LOAD_EXAMPLES=false                     # Don't load example DAGs
 POE_LEAGUE=Settlers           # Current Path of Exile league name
 ```
 
+#### Dashboard Configuration
+```bash
+DASHBOARD_PORT=5001           # Port for the web dashboard
+```
+
 #### Security Requirements
 
 ⚠️ **Critical**: The following keys MUST be changed before deployment:
@@ -175,31 +184,30 @@ POE_LEAGUE=Settlers           # Current Path of Exile league name
 
 ### League Configuration
 
-Update the league name in `dags/poe_data_extraction_dag.py`:
+Update the league name in `dags/poe_unified_pipeline_dag.py`:
 ```python
 LEAGUE = 'Settlers'  # Update to current league
 ```
 
-## 📈 DAGs Overview
+## 📈 DAG Overview
 
-### Data Extraction DAG (`poe_data_extraction`)
+### Unified Pipeline DAG (`poe_unified_pipeline`)
 
 **Schedule**: Every 6 hours  
-**Tasks**:
+**Extraction Tasks**:
 - `fetch_currency_data`: Extract currency exchange rates
 - `fetch_skill_gems_data`: Extract skill gem prices
 - `fetch_divination_cards_data`: Extract divination card values
 - `fetch_unique_items_data`: Extract unique item prices
-- `analyze_profit_opportunities`: Identify profitable trading opportunities
 
-### Data Transformation DAG (`poe_data_transformation`)
-
-**Schedule**: Every 6 hours (after extraction)  
-**Tasks**:
+**Transformation Tasks**:
 - `analyze_currency_trends`: Currency market analysis
 - `analyze_gem_market`: Skill gem market insights
 - `analyze_card_market`: Divination card trends
+- `analyze_profit_opportunities`: Identify profitable trading opportunities
 - `generate_market_summary`: Overall market summary
+
+**Task Dependencies**: Extraction tasks run in parallel, followed by transformation tasks that depend on the extracted data.
 
 ## 🗄️ Database Schema
 
@@ -255,10 +263,10 @@ The included notebook provides:
 
 ### Adding New Data Sources
 
-1. Create extraction function in `poe_data_extraction_dag.py`
+1. Create extraction function in `poe_unified_pipeline_dag.py`
 2. Add corresponding database table in `sql/init_database.sql`
-3. Create transformation logic in `poe_data_transformation_dag.py`
-4. Update DAG dependencies
+3. Create transformation logic in the same DAG file
+4. Update task dependencies in the DAG
 
 ### Local Development
 
@@ -322,15 +330,14 @@ docker-compose logs postgres
 docker exec poe_airflow-airflow-scheduler-1 airflow dags list
 
 # Trigger a DAG manually
-docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_data_extraction
-docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_data_transformation
+docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_unified_pipeline
 
 # Pause/Unpause DAGs
-docker exec poe_airflow-airflow-scheduler-1 airflow dags pause poe_data_extraction
-docker exec poe_airflow-airflow-scheduler-1 airflow dags unpause poe_data_extraction
+docker exec poe_airflow-airflow-scheduler-1 airflow dags pause poe_unified_pipeline
+docker exec poe_airflow-airflow-scheduler-1 airflow dags unpause poe_unified_pipeline
 
 # List DAG runs
-docker exec poe_airflow-airflow-scheduler-1 airflow dags list-runs -d poe_data_extraction --limit 5
+docker exec poe_airflow-airflow-scheduler-1 airflow dags list-runs -d poe_unified_pipeline --limit 5
 ```
 
 ### Database Operations
@@ -353,10 +360,10 @@ docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT item_na
 
 ```bash
 # Find recent DAG run logs
-docker exec poe_airflow-airflow-scheduler-1 find /opt/airflow/logs/dag_id=poe_data_extraction -name "*.log" | tail -5
+docker exec poe_airflow-airflow-scheduler-1 find /opt/airflow/logs/dag_id=poe_unified_pipeline -name "*.log" | tail -5
 
 # View specific task log
-docker exec poe_airflow-airflow-scheduler-1 cat "/opt/airflow/logs/dag_id=poe_data_extraction/run_id=manual__2025-08-15T17:25:14.082210+00:00_K6S1Bmpl/task_id=fetch_currency_data/attempt=1.log"
+docker exec poe_airflow-airflow-scheduler-1 cat "/opt/airflow/logs/dag_id=poe_unified_pipeline/run_id=manual__2025-08-15T17:25:14.082210+00:00_K6S1Bmpl/task_id=fetch_currency_data/attempt=1.log"
 
 # Check for errors in logs
 docker exec poe_airflow-airflow-scheduler-1 find /opt/airflow/logs -name "*.log" -exec grep -l "ERROR\|FAILED" {} \;

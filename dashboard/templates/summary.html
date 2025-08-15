@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}Market Summary - POE Market Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-chart-bar text-info"></i> 
+            Market Summary
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-table"></i> Market Summary Data</span>
+                <span class="badge bg-light text-dark">{{ summary_data|length }} records</span>
+            </div>
+            <div class="card-body">
+                {% if summary_data %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Summary Date</th>
+                                <th>Currencies</th>
+                                <th>Gems</th>
+                                <th>Cards</th>
+                                <th>Unique Items</th>
+                                <th>Avg Currency Value</th>
+                                <th>High Value Currencies</th>
+                                <th>Market Volatility</th>
+                                <th>Extracted At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for summary in summary_data %}
+                            <tr>
+                                <td>
+                                    <strong>{{ summary.summary_date.strftime('%Y-%m-%d') if summary.summary_date else 'Unknown' }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary fs-6">
+                                        {{ "{:,}".format(summary.total_currencies) if summary.total_currencies else 0 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success fs-6">
+                                        {{ "{:,}".format(summary.total_gems) if summary.total_gems else 0 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info fs-6">
+                                        {{ "{:,}".format(summary.total_cards) if summary.total_cards else 0 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning fs-6">
+                                        {{ "{:,}".format(summary.total_unique_items) if summary.total_unique_items else 0 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary fs-6">
+                                        {{ "{:.2f}".format(summary.avg_currency_chaos_value) if summary.avg_currency_chaos_value else 0 }}c
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger fs-6">
+                                        {{ summary.high_value_currencies if summary.high_value_currencies else 0 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark fs-6">
+                                        {{ "{:.2f}".format(summary.market_volatility) if summary.market_volatility else 0 }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ summary.extracted_at[:19] if summary.extracted_at else 'Unknown' }}
+                                    </small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-exclamation-circle fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No Market Summary Available</h4>
+                    <p class="text-muted">Market summary data will appear here once the transformation DAG processes the data.</p>
+                    <a href="/" class="btn btn-primary">Back to Dashboard</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Market Trends -->
+{% if summary_data %}
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-chart-line"></i> Total Items Trend
+            </div>
+            <div class="card-body">
+                <canvas id="itemsTrendChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-coins"></i> Total Value Trend
+            </div>
+            <div class="card-body">
+                <canvas id="valueTrendChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Market Health Indicators -->
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Latest Total Items</h5>
+                <h2 class="text-primary">
+                    {{ "{:,}".format(summary_data[0].total_items) if summary_data and summary_data[0].total_items else '0' }}
+                </h2>
+                <small class="text-muted">Items tracked</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Market Value</h5>
+                <h2 class="text-success">
+                    {{ "{:,.0f}".format(summary_data[0].total_chaos_value) if summary_data and summary_data[0].total_chaos_value else '0' }}c
+                </h2>
+                <small class="text-muted">Total chaos value</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Average Item Value</h5>
+                <h2 class="text-info">
+                    {{ "{:.2f}".format(summary_data[0].average_chaos_value) if summary_data and summary_data[0].average_chaos_value else '0' }}c
+                </h2>
+                <small class="text-muted">Per item average</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Data Quality</h5>
+                {% set latest = summary_data[0] if summary_data else None %}
+                {% if latest and latest.total_items %}
+                    {% set confidence_ratio = ((latest.total_items - (latest.low_confidence_items or 0)) / latest.total_items * 100) %}
+                    <h2 class="{{ 'text-success' if confidence_ratio > 80 else 'text-warning' if confidence_ratio > 60 else 'text-danger' }}">
+                        {{ "{:.1f}".format(confidence_ratio) }}%
+                    </h2>
+                    <small class="text-muted">High confidence data</small>
+                {% else %}
+                    <h2 class="text-muted">N/A</h2>
+                    <small class="text-muted">No data available</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Breakdown -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-exclamation-triangle"></i> High Value Items Trend
+            </div>
+            <div class="card-body">
+                {% if summary_data|length > 1 %}
+                    <canvas id="highValueChart" width="400" height="200"></canvas>
+                {% else %}
+                    <div class="text-center py-4">
+                        <p class="text-muted">Need more data points to show trend</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-question-circle"></i> Low Confidence Items Trend
+            </div>
+            <div class="card-body">
+                {% if summary_data|length > 1 %}
+                    <canvas id="lowConfidenceChart" width="400" height="200"></canvas>
+                {% else %}
+                    <div class="text-center py-4">
+                        <p class="text-muted">Need more data points to show trend</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if summary_data and summary_data|length > 1 %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const summaryData = {{ summary_data|tojson }};
+    
+    // Prepare data for charts
+    const labels = summaryData.map(function(item) {
+        return item.summary_date ? item.summary_date.substring(0, 10) : 'Unknown';
+    }).reverse();
+    
+    const totalCurrencies = summaryData.map(function(item) {
+        return item.total_currencies || 0;
+    }).reverse();
+    
+    const totalGems = summaryData.map(function(item) {
+        return item.total_gems || 0;
+    }).reverse();
+    
+    const highValueCurrencies = summaryData.map(function(item) {
+        return item.high_value_currencies || 0;
+    }).reverse();
+    
+    const marketVolatility = summaryData.map(function(item) {
+        return item.market_volatility || 0;
+    }).reverse();
+    
+    // Currencies Trend Chart
+    const currenciesCtx = document.getElementById('itemsTrendChart').getContext('2d');
+    new Chart(currenciesCtx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Currencies',
+                data: totalCurrencies,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    // Gems Trend Chart
+    const gemsCtx = document.getElementById('valueTrendChart').getContext('2d');
+    new Chart(gemsCtx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Gems',
+                data: totalGems,
+                borderColor: 'rgba(75, 192, 192, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    // High Value Currencies Chart
+    const highValueCtx = document.getElementById('highValueChart').getContext('2d');
+    new Chart(highValueCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'High Value Currencies',
+                data: highValueCurrencies,
+                backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                borderColor: 'rgba(255, 193, 7, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    // Low Confidence Items Chart
+    const lowConfidenceCtx = document.getElementById('lowConfidenceChart').getContext('2d');
+    new Chart(lowConfidenceCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Low Confidence Items',
+                data: lowConfidenceItems,
+                backgroundColor: 'rgba(220, 53, 69, 0.8)',
+                borderColor: 'rgba(220, 53, 69, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}
