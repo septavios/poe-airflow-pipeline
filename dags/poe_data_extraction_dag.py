@@ -379,17 +379,17 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
                 # Get latest currency data
                 cur.execute("""
                     SELECT * FROM poe_currency_data 
-                    WHERE league = %s AND timestamp >= NOW() - INTERVAL '1 hour'
-                    ORDER BY timestamp DESC
-                """, (LEAGUE,))
+                    WHERE extracted_at >= NOW() - INTERVAL '1 hour'
+                    ORDER BY extracted_at DESC
+                """)
                 currency_data = cur.fetchall()
                 
                 # Get latest gems data
                 cur.execute("""
                     SELECT * FROM poe_skill_gems_data 
-                    WHERE league = %s AND timestamp >= NOW() - INTERVAL '1 hour'
-                    ORDER BY timestamp DESC
-                """, (LEAGUE,))
+                    WHERE extracted_at >= NOW() - INTERVAL '1 hour'
+                    ORDER BY extracted_at DESC
+                """)
                 gems_data = cur.fetchall()
         
         if not currency_data or not gems_data:
@@ -407,13 +407,14 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
                 
                 # Estimate leveling profit (simplified)
                 if gem_level < 20 and not gem['corrupted']:
-                    potential_profit = base_value * 0.5  # 50% profit assumption
+                    base_value_float = float(base_value)
+                    potential_profit = base_value_float * 0.5  # 50% profit assumption
                     profit_data = {
-                        'item_name': gem['name'],
+                        'item_name': gem['gem_name'],
                         'item_type': 'skill_gem',
-                        'current_value': base_value,
+                        'current_value': base_value_float,
                         'potential_profit': potential_profit,
-                        'profit_percentage': (potential_profit / base_value) * 100,
+                        'profit_percentage': (potential_profit / base_value_float) * 100,
                         'confidence_score': min(gem['listing_count'] / 50.0, 1.0),  # Confidence based on listings
                         'analysis_details': json.dumps({
                             'gem_level': gem_level,
@@ -432,26 +433,25 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
         # Insert profit opportunities into database
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Clear old profit opportunities for this league
-                cur.execute("DELETE FROM poe_profit_opportunities WHERE league = %s", (LEAGUE,))
+                # Clear old profit opportunities (keep only recent ones)
+                cur.execute("DELETE FROM poe_profit_opportunities WHERE extracted_at < NOW() - INTERVAL '1 day'")
                 
                 # Insert new opportunities
                 for opportunity in profitable_gems:
                     cur.execute("""
                         INSERT INTO poe_profit_opportunities 
-                        (item_name, item_type, current_value, potential_profit, profit_percentage, 
-                         confidence_score, analysis_details, league, timestamp)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (opportunity_type, item_name, item_variant, current_chaos_value, 
+                         profit_percentage, confidence_score, analysis_data, extracted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
+                        opportunity.get('item_type', 'gem'),
                         opportunity['item_name'],
-                        opportunity['item_type'],
+                        opportunity.get('item_variant'),
                         opportunity['current_value'],
-                        opportunity['potential_profit'],
                         opportunity['profit_percentage'],
                         opportunity['confidence_score'],
-                        opportunity['analysis_details'],
-                        opportunity['league'],
-                        opportunity['timestamp']
+                        json.dumps(opportunity.get('analysis_details', {})),
+                        datetime.now()
                     ))
                 conn.commit()
         

@@ -133,9 +133,19 @@ def transform_currency_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
-                    VALUES (%s, %s, %s)
-                """, ('currency_analysis', json.dumps(summary_stats), datetime.now()))
+                    INSERT INTO poe_market_summary (
+                        summary_date, total_currencies, avg_currency_chaos_value, 
+                        high_value_currencies, summary_data, extracted_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    datetime.now().date(),
+                    summary_stats['total_currencies'],
+                    summary_stats['avg_chaos_value'],
+                    summary_stats['high_value_currencies'],
+                    json.dumps(summary_stats),
+                    datetime.now()
+                ))
                 conn.commit()
         
         # Save backup files
@@ -169,7 +179,7 @@ def transform_gems_data(**context) -> Dict[str, Any]:
         # Load gems data from database
         with get_db_connection() as conn:
             df = pd.read_sql_query("""
-                SELECT name, chaos_value, divine_value, gem_level, gem_quality, 
+                SELECT gem_name, chaos_value, divine_value, gem_level, gem_quality, 
                        listing_count, level_required, corrupted, extracted_at
                 FROM poe_skill_gems_data 
                 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
@@ -229,7 +239,7 @@ def transform_gems_data(**context) -> Dict[str, Any]:
             else:
                 return 'Active Skill'
         
-        df['gem_category'] = df['name'].apply(categorize_gem)
+        df['gem_category'] = df['gem_name'].apply(categorize_gem)
         
         # Create summary statistics
         summary_stats = {
@@ -252,9 +262,19 @@ def transform_gems_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
-                    VALUES (%s, %s, %s)
-                """, ('gems_analysis', json.dumps(summary_stats), datetime.now()))
+                    INSERT INTO poe_market_summary (
+                        summary_date, total_gems, avg_gem_chaos_value, 
+                        high_value_gems, summary_data, extracted_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    datetime.now().date(),
+                    summary_stats['total_gems'],
+                    summary_stats['avg_chaos_value'],
+                    summary_stats['high_value_gems'],
+                    json.dumps(summary_stats),
+                    datetime.now()
+                ))
                 conn.commit()
         
         # Save backup files
@@ -293,7 +313,7 @@ def transform_divination_cards_data(**context) -> Dict[str, Any]:
         # Load cards data from database
         with get_db_connection() as conn:
             df = pd.read_sql_query("""
-                SELECT name, chaos_value, divine_value, stack_size, listing_count, extracted_at
+                SELECT card_name, chaos_value, divine_value, stack_size, listing_count, extracted_at
                 FROM poe_divination_cards_data 
                 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
                 ORDER BY extracted_at DESC
@@ -339,8 +359,8 @@ def transform_divination_cards_data(**context) -> Dict[str, Any]:
             'avg_chaos_value': df['chaos_value'].mean(),
             'median_chaos_value': df['chaos_value'].median(),
             'high_value_cards': len(high_value_cards),
-            'most_expensive_card': df.loc[df['chaos_value'].idxmax(), 'name'] if not df.empty else None,
-            'most_liquid_card': df.loc[df['listing_count'].idxmax(), 'name'] if not df.empty else None,
+            'most_expensive_card': df.loc[df['chaos_value'].idxmax(), 'card_name'] if not df.empty else None,
+            'most_liquid_card': df.loc[df['listing_count'].idxmax(), 'card_name'] if not df.empty else None,
             'value_distribution': df['value_category'].value_counts().to_dict(),
             'timestamp': datetime.now().isoformat()
         }
@@ -349,9 +369,20 @@ def transform_divination_cards_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
-                    VALUES (%s, %s, %s)
-                """, ('cards_analysis', json.dumps(summary_stats), datetime.now()))
+                    INSERT INTO poe_market_summary (
+                        summary_date, total_cards, avg_card_chaos_value, 
+                        high_value_cards, most_liquid_card, summary_data, extracted_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    datetime.now().date(),
+                    summary_stats['total_cards'],
+                    summary_stats['avg_chaos_value'],
+                    summary_stats['high_value_cards'],
+                    summary_stats['most_liquid_card'],
+                    json.dumps(summary_stats),
+                    datetime.now()
+                ))
                 conn.commit()
         
         # Save backup files
@@ -428,9 +459,15 @@ def create_market_summary(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
+                    INSERT INTO poe_market_summary (
+                        summary_date, summary_data, extracted_at
+                    )
                     VALUES (%s, %s, %s)
-                """, ('comprehensive_market_summary', json.dumps(market_summary), datetime.now()))
+                """, (
+                    datetime.now().date(),
+                    json.dumps(market_summary),
+                    datetime.now()
+                ))
                 conn.commit()
         
         # Save backup file

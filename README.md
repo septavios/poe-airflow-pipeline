@@ -295,6 +295,115 @@ black dags/ scripts/
 - Extracted data: `logs/poe_data/`
 - Analytics output: `logs/poe_analytics/`
 
+## 🐳 Docker Commands Reference
+
+### Container Management
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Stop all services
+docker-compose down
+
+# View running containers
+docker-compose ps
+
+# View container logs
+docker-compose logs airflow-scheduler
+docker-compose logs airflow-webserver
+docker-compose logs postgres
+```
+
+### Airflow DAG Management
+
+```bash
+# List all DAGs
+docker exec poe_airflow-airflow-scheduler-1 airflow dags list
+
+# Trigger a DAG manually
+docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_data_extraction
+docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_data_transformation
+
+# Pause/Unpause DAGs
+docker exec poe_airflow-airflow-scheduler-1 airflow dags pause poe_data_extraction
+docker exec poe_airflow-airflow-scheduler-1 airflow dags unpause poe_data_extraction
+
+# List DAG runs
+docker exec poe_airflow-airflow-scheduler-1 airflow dags list-runs -d poe_data_extraction --limit 5
+```
+
+### Database Operations
+
+```bash
+# Connect to PostgreSQL
+docker exec -it poe_airflow-postgres-1 psql -U airflow -d airflow
+
+# Check table record counts
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT 'poe_currency_data' as table_name, COUNT(*) as record_count FROM poe_currency_data UNION ALL SELECT 'poe_skill_gems_data' as table_name, COUNT(*) as record_count FROM poe_skill_gems_data;"
+
+# View recent data
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT * FROM poe_market_summary ORDER BY summary_date DESC LIMIT 3;"
+
+# Check profit opportunities
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT item_name, current_chaos_value, profit_percentage FROM poe_profit_opportunities ORDER BY profit_percentage DESC LIMIT 10;"
+```
+
+### Log Management
+
+```bash
+# Find recent DAG run logs
+docker exec poe_airflow-airflow-scheduler-1 find /opt/airflow/logs/dag_id=poe_data_extraction -name "*.log" | tail -5
+
+# View specific task log
+docker exec poe_airflow-airflow-scheduler-1 cat "/opt/airflow/logs/dag_id=poe_data_extraction/run_id=manual__2025-08-15T17:25:14.082210+00:00_K6S1Bmpl/task_id=fetch_currency_data/attempt=1.log"
+
+# Check for errors in logs
+docker exec poe_airflow-airflow-scheduler-1 find /opt/airflow/logs -name "*.log" -exec grep -l "ERROR\|FAILED" {} \;
+```
+
+### Debugging Commands
+
+```bash
+# Check Airflow scheduler status
+docker exec poe_airflow-airflow-scheduler-1 airflow jobs check --job-type SchedulerJob
+
+# Test database connection
+docker exec poe_airflow-airflow-scheduler-1 airflow db check
+
+# List Airflow connections
+docker exec poe_airflow-airflow-scheduler-1 airflow connections list
+
+# Check DAG import errors
+docker exec poe_airflow-airflow-scheduler-1 airflow dags list-import-errors
+```
+
+### Data Validation
+
+```bash
+# Check data freshness (last extraction time)
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT 'poe_currency_data' as table_name, MAX(extracted_at) as last_update FROM poe_currency_data UNION ALL SELECT 'poe_skill_gems_data' as table_name, MAX(extracted_at) as last_update FROM poe_skill_gems_data;"
+
+# Verify data integrity
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) as total_gems, COUNT(DISTINCT gem_name) as unique_gems FROM poe_skill_gems_data WHERE extracted_at >= NOW() - INTERVAL '1 day';"
+
+# Check for duplicate records
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT gem_name, COUNT(*) as count FROM poe_skill_gems_data GROUP BY gem_name HAVING COUNT(*) > 1 LIMIT 10;"
+```
+
+### Performance Monitoring
+
+```bash
+# Check container resource usage
+docker stats poe_airflow-airflow-scheduler-1 poe_airflow-postgres-1 --no-stream
+
+# Monitor database connections
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT count(*) as active_connections FROM pg_stat_activity WHERE state = 'active';"
+
+# Check disk usage
+docker exec poe_airflow-postgres-1 du -sh /var/lib/postgresql/data
+```
+
 ## 📝 API Documentation
 
 ### poe.ninja API Endpoints
