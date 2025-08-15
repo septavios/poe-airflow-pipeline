@@ -25,11 +25,10 @@
                         <thead class="table-dark">
                             <tr>
                                 <th>Currency</th>
-                                <th>Chaos Equivalent</th>
+                                <th>Chaos Value</th>
                                 <th>Count</th>
                                 <th>Confidence</th>
-                                <th>Receive Trend</th>
-                                <th>Pay Trend</th>
+                                <th>Price Trend</th>
                                 <th>Last Updated</th>
                             </tr>
                         </thead>
@@ -37,14 +36,14 @@
                             {% for item in currency_data %}
                             <tr {% if item.low_confidence %}class="low-confidence"{% endif %}>
                                 <td>
-                                    <strong>{{ item.currency_type_name }}</strong>
+                                    <strong>{{ item.currency_name }}</strong>
                                     {% if item.low_confidence %}
                                         <i class="fas fa-exclamation-triangle text-warning" title="Low Confidence"></i>
                                     {% endif %}
                                 </td>
                                 <td>
                                     <span class="badge bg-primary fs-6">
-                                        {{ "%.2f"|format(item.chaos_equivalent) }}
+                                        {{ "%.2f"|format(item.chaos_value) }}
                                     </span>
                                 </td>
                                 <td>{{ item.count or 'N/A' }}</td>
@@ -56,15 +55,8 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if item.receive_sparkline %}
-                                        <div class="sparkline" data-sparkline="{{ item.receive_sparkline }}"></div>
-                                    {% else %}
-                                        <span class="text-muted">No data</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if item.pay_sparkline %}
-                                        <div class="sparkline" data-sparkline="{{ item.pay_sparkline }}"></div>
+                                    {% if item.sparkline %}
+                                        <div class="sparkline" data-sparkline="{{ item.sparkline }}"></div>
                                     {% else %}
                                         <span class="text-muted">No data</span>
                                     {% endif %}
@@ -108,9 +100,9 @@
             <div class="card-body">
                 <h5 class="card-title">Highest Value</h5>
                 <h2 class="text-success">
-                    {{ "%.2f"|format(currency_data[0].chaos_equivalent) if currency_data else '0' }}
+                    {{ "%.2f"|format(currency_data[0].chaos_value) if currency_data else '0' }}
                 </h2>
-                <small class="text-muted">{{ currency_data[0].currency_type_name if currency_data else 'N/A' }}</small>
+                <small class="text-muted">{{ currency_data[0].currency_name if currency_data else 'N/A' }}</small>
             </div>
         </div>
     </div>
@@ -130,7 +122,7 @@
             <div class="card-body">
                 <h5 class="card-title">Average Value</h5>
                 <h2 class="text-info">
-                    {% set avg = (currency_data|sum(attribute='chaos_equivalent') / currency_data|length) if currency_data else 0 %}
+                    {% set avg = (currency_data|sum(attribute='chaos_value') / currency_data|length) if currency_data else 0 %}
                     {{ "%.2f"|format(avg) }}
                 </h2>
                 <small class="text-muted">Chaos</small>

@@ -144,10 +144,10 @@ fetch('/api/currency-chart')
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: data.map(item => item.currency_type_name),
+                labels: data.map(item => item.currency_name),
                 datasets: [{
                     label: 'Chaos Equivalent',
-                    data: data.map(item => item.chaos_equivalent),
+                    data: data.map(item => item.chaos_value),
                     backgroundColor: 'rgba(102, 126, 234, 0.8)',
                     borderColor: 'rgba(102, 126, 234, 1)',
                     borderWidth: 1

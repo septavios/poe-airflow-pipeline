@@ -111,12 +111,12 @@ def dashboard():
 def currency_data():
     """Currency data page"""
     query = """
-        SELECT currency_type_name, chaos_equivalent, 
-               receive_sparkline, pay_sparkline, 
+        SELECT currency_name, chaos_value, 
+               sparkline, 
                low_confidence, count, extracted_at
         FROM poe_currency_data 
-        WHERE extracted_at >= NOW() - INTERVAL '1 day'
-        ORDER BY chaos_equivalent DESC
+        WHERE extracted_at >= NOW() - INTERVAL '7 days'
+        ORDER BY chaos_value DESC
         LIMIT 100
     """
     
@@ -135,7 +135,7 @@ def gems_data():
                count, listing_count, low_confidence, 
                corrupted, extracted_at
         FROM poe_skill_gems_data 
-        WHERE extracted_at >= NOW() - INTERVAL '1 day'
+        WHERE extracted_at >= NOW() - INTERVAL '7 days'
         ORDER BY chaos_value DESC
         LIMIT %s OFFSET %s
     """
@@ -146,7 +146,7 @@ def gems_data():
     total_query = """
         SELECT COUNT(*) as total 
         FROM poe_skill_gems_data 
-        WHERE extracted_at >= NOW() - INTERVAL '1 day'
+        WHERE extracted_at >= NOW() - INTERVAL '7 days'
     """
     total_result = execute_query(total_query)
     total = total_result[0]['total'] if total_result else 0
@@ -168,7 +168,7 @@ def cards_data():
                    count, listing_count, low_confidence, 
                    extracted_at
             FROM poe_divination_cards_data 
-            WHERE extracted_at >= NOW() - INTERVAL '1 day'
+            WHERE extracted_at >= NOW() - INTERVAL '7 days'
             AND LOWER(card_name) LIKE LOWER(%s)
             ORDER BY chaos_value DESC
             LIMIT 100
@@ -180,7 +180,7 @@ def cards_data():
                    count, listing_count, low_confidence, 
                    extracted_at
             FROM poe_divination_cards_data 
-            WHERE extracted_at >= NOW() - INTERVAL '1 day'
+            WHERE extracted_at >= NOW() - INTERVAL '7 days'
             ORDER BY chaos_value DESC
             LIMIT 100
         """
@@ -265,4 +265,6 @@ def profit_chart_data():
     return jsonify(data)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Enable debug mode for hot-reload in development
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=5000, debug=debug_mode)

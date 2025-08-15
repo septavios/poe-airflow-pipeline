@@ -121,7 +121,15 @@ POE_Airflow/
 │   └── airflow.cfg               # Airflow configuration
 ├── dashboard/                     # Web dashboard application
 │   ├── app.py                    # Flask application
+│   ├── Dockerfile                # Dashboard container configuration
 │   ├── templates/                # HTML templates
+│   │   ├── base.html            # Base template with styling
+│   │   ├── dashboard.html       # Main dashboard page
+│   │   ├── currency.html        # Currency data view
+│   │   ├── gems.html            # Skill gems data view
+│   │   ├── cards.html           # Divination cards view
+│   │   ├── profit.html          # Profit opportunities view
+│   │   └── summary.html         # Market summary view
 │   └── requirements.txt          # Dashboard dependencies
 ├── logs/                          # Application logs and data
 │   ├── poe_data/                 # Raw extracted data
@@ -227,6 +235,84 @@ LEAGUE = 'Settlers'  # Update to current league
 - Timestamp indexes for time-series analysis
 - Composite indexes for variant-based queries
 
+## 🖥️ Web Dashboard
+
+The integrated web dashboard provides real-time visualization of Path of Exile market data with a modern, dark-themed interface optimized for readability.
+
+### Dashboard Features
+
+**Main Dashboard** (`http://localhost:5001`)
+- **Statistics Overview**: Key metrics including total currencies, skill gems, divination cards, and unique items
+- **Market Summary**: Latest update timestamps and data freshness indicators
+- **Top Currency Values**: Visual charts showing highest-value currencies
+- **Profit Opportunities**: Quick access to profitable trading opportunities
+- **Navigation**: Easy access to detailed views for each data category
+
+**Currency Data View** (`http://localhost:5001/currency`)
+- Real-time currency exchange rates with chaos orb values
+- Confidence indicators for data reliability
+- Price trend sparklines for visual trend analysis
+- Last updated timestamps for data freshness
+- Summary statistics including total currencies and highest values
+
+**Skill Gems View** (`http://localhost:5001/gems`)
+- Comprehensive gem pricing with level and quality variants
+- Corrupted vs non-corrupted gem comparisons
+- Market confidence indicators
+- Detailed gem statistics and trends
+
+**Divination Cards View** (`http://localhost:5001/cards`)
+- Card values with stack size information
+- Confidence ratings for price accuracy
+- Market trend indicators
+- Summary statistics for card market overview
+
+**Profit Opportunities View** (`http://localhost:5001/profit`)
+- Identified arbitrage opportunities across markets
+- Profit percentage calculations
+- Current market values and potential returns
+- Risk assessment through confidence indicators
+
+**Market Summary View** (`http://localhost:5001/summary`)
+- Aggregated market analytics and insights
+- Historical trend analysis
+- Market health indicators
+- Cross-category comparisons
+
+### Dashboard Technology Stack
+
+- **Backend**: Flask web framework with PostgreSQL integration
+- **Frontend**: Bootstrap 5 with custom dark theme
+- **Styling**: Modern CSS with Inter font family for improved readability
+- **Data Visualization**: Integrated charts and sparklines
+- **Responsive Design**: Mobile-friendly interface
+
+### Dashboard Configuration
+
+The dashboard is automatically configured through Docker Compose:
+
+```yaml
+poe-dashboard:
+  build: ./dashboard
+  ports:
+    - "5001:5000"
+  environment:
+    - DATABASE_URL=postgresql://airflow:airflow@postgres:5432/airflow
+  depends_on:
+    - postgres
+```
+
+### Customizing the Dashboard
+
+**Theme Customization**: Modify `dashboard/templates/base.html` to adjust:
+- Color schemes and typography
+- Layout and spacing
+- Interactive elements and hover effects
+
+**Adding New Views**: Create new templates in `dashboard/templates/` and add corresponding routes in `dashboard/app.py`
+
+**Data Integration**: The dashboard automatically connects to the PostgreSQL database and displays real-time data from all pipeline extractions.
+
 ## 📊 Analytics & Insights
 
 ### Available Metrics
@@ -288,20 +374,95 @@ black dags/ scripts/
 1. **Database Connection Errors**
    - Verify PostgreSQL container is running
    - Check database credentials in `.env`
+   - Test connection: `docker exec poe_airflow-postgres-1 pg_isready -U airflow`
 
 2. **API Rate Limiting**
    - poe.ninja has rate limits; DAG includes retry logic
    - Adjust schedule if needed
+   - Check API response in logs for rate limit messages
 
 3. **Memory Issues**
    - Ensure sufficient Docker memory allocation
    - Monitor container resource usage
+   - Restart containers if memory usage is high
+
+4. **Dashboard Not Loading**
+   - Check if dashboard container is running: `docker ps | grep dashboard`
+   - Verify port 5001 is not in use: `lsof -i :5001`
+   - Check dashboard logs: `docker logs poe_airflow-poe-dashboard-1`
+   - Restart dashboard: `docker-compose restart poe-dashboard`
+
+5. **Data Not Updating**
+   - Check DAG status in Airflow UI
+   - Verify DAG is unpaused: `docker exec poe_airflow-airflow-scheduler-1 airflow dags state poe_unified_pipeline`
+   - Check extraction logs for API errors
+   - Manually trigger DAG: `docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_unified_pipeline`
 
 ### Logs Location
 
 - Airflow logs: `logs/dag_id=*/`
 - Extracted data: `logs/poe_data/`
 - Analytics output: `logs/poe_analytics/`
+- Dashboard logs: `docker logs poe_airflow-poe-dashboard-1`
+
+### Debug Commands
+
+#### Quick Health Check
+```bash
+# Check all services status
+docker-compose ps
+
+# Quick data validation
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) FROM poe_currency_data WHERE extracted_at >= NOW() - INTERVAL '1 hour';"
+
+# Check latest DAG run
+docker exec poe_airflow-airflow-scheduler-1 airflow dags list-runs -d poe_unified_pipeline --limit 1
+```
+
+#### Dashboard Debugging
+```bash
+# Check dashboard container status
+docker inspect poe_airflow-poe-dashboard-1 --format='{{.State.Status}}'
+
+# Test dashboard database connection
+docker exec poe_airflow-poe-dashboard-1 python -c "import psycopg2; conn = psycopg2.connect('postgresql://airflow:airflow@postgres:5432/airflow'); print('Connection successful')"
+
+# Check dashboard port binding
+docker port poe_airflow-poe-dashboard-1
+
+# View dashboard application logs
+docker logs poe_airflow-poe-dashboard-1 --follow
+```
+
+#### Data Pipeline Debugging
+```bash
+# Check for failed tasks in last 24 hours
+docker exec poe_airflow-airflow-scheduler-1 airflow tasks states-for-dag-run poe_unified_pipeline $(docker exec poe_airflow-airflow-scheduler-1 airflow dags list-runs -d poe_unified_pipeline --limit 1 --output table | tail -1 | awk '{print $2}')
+
+# View specific task logs
+docker exec poe_airflow-airflow-scheduler-1 airflow tasks log poe_unified_pipeline fetch_currency_data $(date +%Y-%m-%d) 1
+
+# Check API connectivity
+docker exec poe_airflow-airflow-scheduler-1 curl -s "https://poe.ninja/api/data/currencyoverview?league=Settlers&type=Currency" | jq '.lines | length'
+
+# Validate database schema
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "\dt poe_*"
+```
+
+#### Performance Debugging
+```bash
+# Check database query performance
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT query, mean_exec_time, calls FROM pg_stat_statements WHERE query LIKE '%poe_%' ORDER BY mean_exec_time DESC LIMIT 5;"
+
+# Monitor real-time container stats
+docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
+
+# Check disk space usage
+docker system df
+
+# Analyze database size
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT schemaname,tablename,attname,n_distinct,correlation FROM pg_stats WHERE tablename LIKE 'poe_%';"
+```
 
 ## 🐳 Docker Commands Reference
 
@@ -396,19 +557,31 @@ docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*
 
 # Check for duplicate records
 docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT gem_name, COUNT(*) as count FROM poe_skill_gems_data GROUP BY gem_name HAVING COUNT(*) > 1 LIMIT 10;"
+
+# Validate profit opportunities data
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) as total_opportunities, AVG(profit_percentage) as avg_profit FROM poe_profit_opportunities WHERE created_at >= NOW() - INTERVAL '1 day';"
+
+# Check market summary generation
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT summary_date, total_items_tracked, avg_chaos_value FROM poe_market_summary ORDER BY summary_date DESC LIMIT 5;"
 ```
 
 ### Performance Monitoring
 
 ```bash
 # Check container resource usage
-docker stats poe_airflow-airflow-scheduler-1 poe_airflow-postgres-1 --no-stream
+docker stats poe_airflow-airflow-scheduler-1 poe_airflow-postgres-1 poe_airflow-poe-dashboard-1 --no-stream
 
 # Monitor database connections
 docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT count(*) as active_connections FROM pg_stat_activity WHERE state = 'active';"
 
 # Check disk usage
 docker exec poe_airflow-postgres-1 du -sh /var/lib/postgresql/data
+
+# Monitor dashboard container logs
+docker logs poe_airflow-poe-dashboard-1 --tail 50
+
+# Check dashboard health
+curl -f http://localhost:5001/health || echo "Dashboard not responding"
 ```
 
 ## 📝 API Documentation
