@@ -62,7 +62,7 @@ def log_extraction(extraction_type: str, status: str, record_count: int = 0, err
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO extraction_log (extraction_type, status, records_processed, error_message, extracted_at)
+                    INSERT INTO poe_extraction_log (extraction_type, status, records_processed, error_message, extracted_at)
                     VALUES (%s, %s, %s, %s, %s)
                 """, (extraction_type, status, record_count, error_message, datetime.now()))
                 conn.commit()
@@ -105,7 +105,7 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
             with conn.cursor() as cur:
                 for item in currency_data:
                     cur.execute("""
-                        INSERT INTO currency_data 
+                        INSERT INTO poe_currency_data 
                         (currency_name, chaos_value, details_id, count, listing_count, icon_url, trade_info, sparkline, low_confidence, extracted_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
@@ -174,7 +174,7 @@ def fetch_skill_gems_data(**context) -> Dict[str, Any]:
             with conn.cursor() as cur:
                 for item in gems_data:
                     cur.execute("""
-                        INSERT INTO skill_gems_data 
+                        INSERT INTO poe_skill_gems_data 
                         (gem_name, gem_type, chaos_value, divine_value, gem_level, gem_quality, corrupted, 
                          variant, listing_count, count, details_id, icon_url, trade_info, sparkline, low_confidence, extracted_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -246,7 +246,7 @@ def fetch_divination_cards_data(**context) -> Dict[str, Any]:
             with conn.cursor() as cur:
                 for item in cards_data:
                     cur.execute("""
-                        INSERT INTO divination_cards_data 
+                        INSERT INTO poe_divination_cards_data 
                         (card_name, chaos_value, divine_value, stack_size, listing_count, count, 
                          details_id, icon_url, trade_info, sparkline, low_confidence, extracted_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -328,7 +328,7 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
             with conn.cursor() as cur:
                 for item in all_items_data:
                     cur.execute("""
-                        INSERT INTO unique_items_data 
+                        INSERT INTO poe_unique_items_data 
                         (item_name, base_type, item_type, chaos_value, divine_value, exalted_value, 
                          links, item_level, variant, listing_count, count, details_id, 
                          icon_url, trade_info, sparkline, low_confidence, corrupted, extracted_at)
@@ -378,7 +378,7 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Get latest currency data
                 cur.execute("""
-                    SELECT * FROM currency_data 
+                    SELECT * FROM poe_currency_data 
                     WHERE league = %s AND timestamp >= NOW() - INTERVAL '1 hour'
                     ORDER BY timestamp DESC
                 """, (LEAGUE,))
@@ -386,7 +386,7 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
                 
                 # Get latest gems data
                 cur.execute("""
-                    SELECT * FROM skill_gems_data 
+                    SELECT * FROM poe_skill_gems_data 
                     WHERE league = %s AND timestamp >= NOW() - INTERVAL '1 hour'
                     ORDER BY timestamp DESC
                 """, (LEAGUE,))
@@ -433,12 +433,12 @@ def calculate_profit_opportunities(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # Clear old profit opportunities for this league
-                cur.execute("DELETE FROM profit_opportunities WHERE league = %s", (LEAGUE,))
+                cur.execute("DELETE FROM poe_profit_opportunities WHERE league = %s", (LEAGUE,))
                 
                 # Insert new opportunities
                 for opportunity in profitable_gems:
                     cur.execute("""
-                        INSERT INTO profit_opportunities 
+                        INSERT INTO poe_profit_opportunities 
                         (item_name, item_type, current_value, potential_profit, profit_percentage, 
                          confidence_score, analysis_details, league, timestamp)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)

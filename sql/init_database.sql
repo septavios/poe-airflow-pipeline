@@ -5,7 +5,7 @@
 -- CREATE DATABASE poe_market_data;
 
 -- Currency data table for tracking exchange rates over time
-CREATE TABLE IF NOT EXISTS currency_data (
+CREATE TABLE IF NOT EXISTS poe_currency_data (
     id SERIAL PRIMARY KEY,
     currency_name VARCHAR(100) NOT NULL,
     currency_type VARCHAR(50),
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS currency_data (
 );
 
 -- Skill gems data table
-CREATE TABLE IF NOT EXISTS skill_gems_data (
+CREATE TABLE IF NOT EXISTS poe_skill_gems_data (
     id SERIAL PRIMARY KEY,
     gem_name VARCHAR(200) NOT NULL,
     gem_type VARCHAR(50),
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS skill_gems_data (
 );
 
 -- Divination cards data table
-CREATE TABLE IF NOT EXISTS divination_cards_data (
+CREATE TABLE IF NOT EXISTS poe_divination_cards_data (
     id SERIAL PRIMARY KEY,
     card_name VARCHAR(200) NOT NULL,
     chaos_value DECIMAL(15,4),
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS divination_cards_data (
 );
 
 -- Unique items data table
-CREATE TABLE IF NOT EXISTS unique_items_data (
+CREATE TABLE IF NOT EXISTS poe_unique_items_data (
     id SERIAL PRIMARY KEY,
     item_name VARCHAR(200) NOT NULL,
     item_type VARCHAR(100),
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS unique_items_data (
 );
 
 -- Market summary table for aggregated analysis
-CREATE TABLE IF NOT EXISTS market_summary (
+CREATE TABLE IF NOT EXISTS poe_market_summary (
     id SERIAL PRIMARY KEY,
     summary_date DATE NOT NULL,
     total_currencies INTEGER,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS market_summary (
 );
 
 -- Profit opportunities table
-CREATE TABLE IF NOT EXISTS profit_opportunities (
+CREATE TABLE IF NOT EXISTS poe_profit_opportunities (
     id SERIAL PRIMARY KEY,
     opportunity_type VARCHAR(50) NOT NULL, -- 'currency', 'gem', 'card', 'unique'
     item_name VARCHAR(200) NOT NULL,
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS profit_opportunities (
 );
 
 -- Data extraction log table
-CREATE TABLE IF NOT EXISTS extraction_log (
+CREATE TABLE IF NOT EXISTS poe_extraction_log (
     id SERIAL PRIMARY KEY,
     extraction_type VARCHAR(50) NOT NULL,
     status VARCHAR(20) NOT NULL, -- 'SUCCESS', 'FAILED', 'PARTIAL'
@@ -149,26 +149,26 @@ CREATE TABLE IF NOT EXISTS extraction_log (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_currency_data_extracted_at ON currency_data(extracted_at);
-CREATE INDEX IF NOT EXISTS idx_currency_data_name ON currency_data(currency_name);
-CREATE INDEX IF NOT EXISTS idx_currency_data_chaos_value ON currency_data(chaos_value);
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_extracted_at ON poe_currency_data(extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_name ON poe_currency_data(currency_name);
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_chaos_value ON poe_currency_data(chaos_value);
 
-CREATE INDEX IF NOT EXISTS idx_skill_gems_extracted_at ON skill_gems_data(extracted_at);
-CREATE INDEX IF NOT EXISTS idx_skill_gems_name ON skill_gems_data(gem_name);
-CREATE INDEX IF NOT EXISTS idx_skill_gems_chaos_value ON skill_gems_data(chaos_value);
+CREATE INDEX IF NOT EXISTS idx_poe_skill_gems_extracted_at ON poe_skill_gems_data(extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_skill_gems_name ON poe_skill_gems_data(gem_name);
+CREATE INDEX IF NOT EXISTS idx_poe_skill_gems_chaos_value ON poe_skill_gems_data(chaos_value);
 
-CREATE INDEX IF NOT EXISTS idx_divination_cards_extracted_at ON divination_cards_data(extracted_at);
-CREATE INDEX IF NOT EXISTS idx_divination_cards_name ON divination_cards_data(card_name);
-CREATE INDEX IF NOT EXISTS idx_divination_cards_chaos_value ON divination_cards_data(chaos_value);
+CREATE INDEX IF NOT EXISTS idx_poe_divination_cards_extracted_at ON poe_divination_cards_data(extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_divination_cards_name ON poe_divination_cards_data(card_name);
+CREATE INDEX IF NOT EXISTS idx_poe_divination_cards_chaos_value ON poe_divination_cards_data(chaos_value);
 
-CREATE INDEX IF NOT EXISTS idx_unique_items_extracted_at ON unique_items_data(extracted_at);
-CREATE INDEX IF NOT EXISTS idx_unique_items_name ON unique_items_data(item_name);
-CREATE INDEX IF NOT EXISTS idx_unique_items_chaos_value ON unique_items_data(chaos_value);
+CREATE INDEX IF NOT EXISTS idx_poe_unique_items_extracted_at ON poe_unique_items_data(extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_unique_items_name ON poe_unique_items_data(item_name);
+CREATE INDEX IF NOT EXISTS idx_poe_unique_items_chaos_value ON poe_unique_items_data(chaos_value);
 
-CREATE INDEX IF NOT EXISTS idx_market_summary_date ON market_summary(summary_date);
-CREATE INDEX IF NOT EXISTS idx_profit_opportunities_extracted_at ON profit_opportunities(extracted_at);
-CREATE INDEX IF NOT EXISTS idx_profit_opportunities_type ON profit_opportunities(opportunity_type);
-CREATE INDEX IF NOT EXISTS idx_extraction_log_extracted_at ON extraction_log(extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_market_summary_date ON poe_market_summary(summary_date);
+CREATE INDEX IF NOT EXISTS idx_poe_profit_opportunities_extracted_at ON poe_profit_opportunities(extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_profit_opportunities_type ON poe_profit_opportunities(opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_poe_extraction_log_extracted_at ON poe_extraction_log(extracted_at);
 
 -- Create views for common queries
 CREATE OR REPLACE VIEW latest_currency_prices AS
@@ -180,7 +180,7 @@ SELECT DISTINCT ON (currency_name)
     count,
     listing_count,
     extracted_at
-FROM currency_data 
+FROM poe_currency_data 
 ORDER BY currency_name, extracted_at DESC;
 
 CREATE OR REPLACE VIEW latest_gem_prices AS
@@ -195,7 +195,7 @@ SELECT DISTINCT ON (gem_name, gem_level, gem_quality, variant)
     count,
     listing_count,
     extracted_at
-FROM skill_gems_data 
+FROM poe_skill_gems_data 
 ORDER BY gem_name, gem_level, gem_quality, variant, extracted_at DESC;
 
 CREATE OR REPLACE VIEW price_trends_24h AS
@@ -206,7 +206,7 @@ SELECT
     MIN(chaos_value) as min_chaos_value,
     MAX(chaos_value) as max_chaos_value,
     COUNT(*) as data_points
-FROM currency_data 
+FROM poe_currency_data 
 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
 GROUP BY currency_name
 UNION ALL
@@ -217,7 +217,7 @@ SELECT
     MIN(chaos_value) as min_chaos_value,
     MAX(chaos_value) as max_chaos_value,
     COUNT(*) as data_points
-FROM skill_gems_data 
+FROM poe_skill_gems_data 
 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
 GROUP BY gem_name;
 

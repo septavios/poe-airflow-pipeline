@@ -53,7 +53,7 @@ def log_transformation(transformation_type: str, records_processed: int, status:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO extraction_log (data_type, records_extracted, status, error_message, extracted_at)
+                    INSERT INTO poe_extraction_log (data_type, records_extracted, status, error_message, extracted_at)
                     VALUES (%s, %s, %s, %s, %s)
                 """, (f"transform_{transformation_type}", records_processed, status, error_message, datetime.now()))
                 conn.commit()
@@ -79,7 +79,7 @@ def transform_currency_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             df = pd.read_sql_query("""
                 SELECT currency_name, chaos_value, listing_count, extracted_at
-                FROM currency_data 
+                FROM poe_currency_data 
                 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
                 ORDER BY extracted_at DESC
             """, conn)
@@ -133,7 +133,7 @@ def transform_currency_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO market_summary (summary_type, summary_data, created_at)
+                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
                     VALUES (%s, %s, %s)
                 """, ('currency_analysis', json.dumps(summary_stats), datetime.now()))
                 conn.commit()
@@ -171,7 +171,7 @@ def transform_gems_data(**context) -> Dict[str, Any]:
             df = pd.read_sql_query("""
                 SELECT name, chaos_value, divine_value, gem_level, gem_quality, 
                        listing_count, level_required, corrupted, extracted_at
-                FROM skill_gems_data 
+                FROM poe_skill_gems_data 
                 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
                 ORDER BY extracted_at DESC
             """, conn)
@@ -252,7 +252,7 @@ def transform_gems_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO market_summary (summary_type, summary_data, created_at)
+                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
                     VALUES (%s, %s, %s)
                 """, ('gems_analysis', json.dumps(summary_stats), datetime.now()))
                 conn.commit()
@@ -294,7 +294,7 @@ def transform_divination_cards_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             df = pd.read_sql_query("""
                 SELECT name, chaos_value, divine_value, stack_size, listing_count, extracted_at
-                FROM divination_cards_data 
+                FROM poe_divination_cards_data 
                 WHERE extracted_at >= NOW() - INTERVAL '24 hours'
                 ORDER BY extracted_at DESC
             """, conn)
@@ -349,7 +349,7 @@ def transform_divination_cards_data(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO market_summary (summary_type, summary_data, created_at)
+                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
                     VALUES (%s, %s, %s)
                 """, ('cards_analysis', json.dumps(summary_stats), datetime.now()))
                 conn.commit()
@@ -392,7 +392,7 @@ def create_market_summary(**context) -> Dict[str, Any]:
                 # Get latest summaries for each type
                 cur.execute("""
                     SELECT DISTINCT ON (summary_type) summary_type, summary_data, created_at
-                    FROM market_summary 
+                    FROM poe_market_summary 
                     WHERE created_at >= NOW() - INTERVAL '24 hours'
                     ORDER BY summary_type, created_at DESC
                 """)
@@ -416,7 +416,7 @@ def create_market_summary(**context) -> Dict[str, Any]:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
                     SELECT item_name, profit_chaos, profit_margin_percent, market_liquidity
-                    FROM profit_opportunities 
+                    FROM poe_profit_opportunities 
                     WHERE created_at >= NOW() - INTERVAL '24 hours'
                     ORDER BY profit_margin_percent DESC
                     LIMIT 10
@@ -428,7 +428,7 @@ def create_market_summary(**context) -> Dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO market_summary (summary_type, summary_data, created_at)
+                    INSERT INTO poe_market_summary (summary_type, summary_data, created_at)
                     VALUES (%s, %s, %s)
                 """, ('comprehensive_market_summary', json.dumps(market_summary), datetime.now()))
                 conn.commit()
