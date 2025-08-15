@@ -205,12 +205,13 @@ LEAGUE = 'Settlers'  # Update to current league
 
 ### Tables
 
-- **currency_data**: Currency exchange rates and market data
-- **skill_gems_data**: Skill gem prices with level/quality variants
-- **divination_cards_data**: Divination card values and stack sizes
-- **unique_items_data**: Unique item prices with variants
-- **market_summary**: Aggregated market analytics
-- **extraction_log**: Pipeline execution logs
+- **poe_currency_data**: Currency exchange rates and market data
+- **poe_skill_gems_data**: Skill gem prices with level/quality variants
+- **poe_divination_cards_data**: Divination card values and stack sizes
+- **poe_unique_items_data**: Unique item prices with variants
+- **poe_market_summary**: Aggregated market analytics
+- **poe_profit_opportunities**: Identified profitable trading opportunities
+- **poe_extraction_log**: Pipeline execution logs
 
 ### Key Indexes
 
