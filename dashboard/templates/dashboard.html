@@ -1,136 +1,98 @@
 {% extends "base.html" %}
 
-{% block title %}POE Market Dashboard - Overview{% endblock %}
+{% block title %}POE Market Dashboard{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <h1 class="mb-4">
-            <i class="fas fa-chart-line text-primary"></i> 
-            POE Market Data Overview
-        </h1>
-    </div>
-</div>
-
-<!-- Statistics Cards -->
-<div class="row">
-    <div class="col-md-2">
-        <div class="stat-card text-center">
-            <div class="stat-number">{{ stats.currency_count }}</div>
-            <div>Currency Items</div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="stat-card text-center">
-            <div class="stat-number">{{ stats.gems_count }}</div>
-            <div>Skill Gems</div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="stat-card text-center">
-            <div class="stat-number">{{ stats.cards_count }}</div>
-            <div>Divination Cards</div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="stat-card text-center">
-            <div class="stat-number">{{ stats.profit_count }}</div>
-            <div>Profit Opportunities</div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="stat-card text-center">
-            <div class="stat-number">{{ stats.summary_count }}</div>
-            <div>Market Summaries</div>
-        </div>
-    </div>
-    <div class="col-md-2">
-        <div class="stat-card text-center">
-            <div style="font-size: 1rem; font-weight: bold;">
+<!-- Compact Header -->
+<div class="compact-header mb-3">
+    <div class="d-flex justify-content-between align-items-center">
+        <h2 class="mb-0"><i class="fas fa-chart-line"></i> Market Overview</h2>
+        <div class="last-update">
+            <small class="text-muted">Last Update: 
                 {% if stats.last_update != 'Never' %}
-                    {{ stats.last_update[:19] }}
+                    {{ stats.last_update[:16] }}
                 {% else %}
                     Never
                 {% endif %}
-            </div>
-            <div>Last Update</div>
+            </small>
         </div>
     </div>
 </div>
 
-<!-- Charts Row -->
-<div class="row">
+<!-- Compact Statistics Row -->
+<div class="stats-row mb-3">
+    <div class="stat-item">
+        <div class="stat-value">{{ stats.currency_count }}</div>
+        <div class="stat-label">Currencies</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-value">{{ stats.gems_count }}</div>
+        <div class="stat-label">Gems</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-value">{{ stats.cards_count }}</div>
+        <div class="stat-label">Cards</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-value">{{ stats.profit_count }}</div>
+        <div class="stat-label">Opportunities</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-value">{{ stats.summary_count }}</div>
+        <div class="stat-label">Summaries</div>
+    </div>
+</div>
+
+<!-- Compact Charts Row -->
+<div class="row g-2 mb-3">
     <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-coins"></i> Top Currency Values (Chaos Equivalent)
+        <div class="compact-card">
+            <div class="compact-card-header">
+                <i class="fas fa-coins"></i> Top Currencies
             </div>
-            <div class="card-body">
-                <canvas id="currencyChart" width="400" height="300"></canvas>
+            <div class="compact-card-body">
+                <canvas id="currencyChart" height="200"></canvas>
             </div>
         </div>
     </div>
     <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-chart-line"></i> Top Profit Opportunities (%)
+        <div class="compact-card">
+            <div class="compact-card-header">
+                <i class="fas fa-chart-line"></i> Profit Opportunities
             </div>
-            <div class="card-body">
-                <canvas id="profitChart" width="400" height="300"></canvas>
+            <div class="compact-card-body">
+                <canvas id="profitChart" height="200"></canvas>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Quick Links -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-link"></i> Quick Access
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-2">
-                        <a href="/currency" class="btn btn-outline-primary btn-lg w-100 mb-2">
-                            <i class="fas fa-coins"></i><br>
-                            Currency Data
-                        </a>
-                    </div>
-                    <div class="col-md-2">
-                        <a href="/gems" class="btn btn-outline-success btn-lg w-100 mb-2">
-                            <i class="fas fa-gem"></i><br>
-                            Skill Gems
-                        </a>
-                    </div>
-                    <div class="col-md-2">
-                        <a href="/cards" class="btn btn-outline-info btn-lg w-100 mb-2">
-                            <i class="fas fa-id-card"></i><br>
-                            Divination Cards
-                        </a>
-                    </div>
-                    <div class="col-md-2">
-                        <a href="/profit" class="btn btn-outline-warning btn-lg w-100 mb-2">
-                            <i class="fas fa-chart-line"></i><br>
-                            Profit Opportunities
-                        </a>
-                    </div>
-                    <div class="col-md-2">
-                        <a href="/market-summary" class="btn btn-outline-secondary btn-lg w-100 mb-2">
-                            <i class="fas fa-chart-bar"></i><br>
-                            Market Summary
-                        </a>
-                    </div>
-                    <div class="col-md-2">
-                        <a href="http://localhost:8080" target="_blank" class="btn btn-outline-dark btn-lg w-100 mb-2">
-                            <i class="fas fa-cogs"></i><br>
-                            Airflow UI
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<!-- Compact Navigation Grid -->
+<div class="nav-grid">
+    <a href="/currency" class="nav-item">
+        <i class="fas fa-coins"></i>
+        <span>Currency</span>
+    </a>
+    <a href="/gems" class="nav-item">
+        <i class="fas fa-gem"></i>
+        <span>Gems</span>
+    </a>
+    <a href="/cards" class="nav-item">
+        <i class="fas fa-id-card"></i>
+        <span>Cards</span>
+    </a>
+    <a href="/profit" class="nav-item">
+        <i class="fas fa-chart-line"></i>
+        <span>Profit</span>
+    </a>
+    <a href="/market-summary" class="nav-item">
+        <i class="fas fa-chart-bar"></i>
+        <span>Summary</span>
+    </a>
+    <a href="http://localhost:8080" target="_blank" class="nav-item">
+        <i class="fas fa-cogs"></i>
+        <span>Airflow</span>
+    </a>
 </div>
 {% endblock %}
 

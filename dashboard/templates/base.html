@@ -312,6 +312,118 @@
             color: #b0b0b0;
             font-size: 0.875rem;
         }
+
+        /* Compact Dashboard Styles */
+        .compact-header {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            flex: 1;
+            min-width: 120px;
+            background: #2a2a2a;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            padding: 0.75rem;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .stat-item:hover {
+            background: #333;
+            border-color: #555;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #b0b0b0;
+            margin-top: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .compact-card {
+            background: #2a2a2a;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .compact-card-header {
+            background: #333;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #ffffff;
+            border-bottom: 1px solid #404040;
+        }
+
+        .compact-card-body {
+            padding: 0.75rem;
+        }
+
+        .nav-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem 0.75rem;
+            background: #2a2a2a;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            text-decoration: none;
+            color: #e8e8e8;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        .nav-item:hover {
+            background: #333;
+            border-color: #555;
+            color: #ffffff;
+            text-decoration: none;
+            transform: translateY(-1px);
+        }
+
+        .nav-item i {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #4a90e2;
+        }
+
+        .nav-item span {
+            font-weight: 500;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .stats-row {
+                flex-direction: column;
+            }
+            
+            .nav-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
     </style>
 </head>
 <body>
