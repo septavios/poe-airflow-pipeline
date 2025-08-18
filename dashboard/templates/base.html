@@ -99,6 +99,42 @@
             padding: 10px 8px;
             vertical-align: middle;
         }
+        
+        /* Skeleton Loading Styles */
+        .skeleton-text, .skeleton-badge {
+            background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+            border-radius: 4px;
+            height: 20px;
+        }
+        
+        .skeleton-text {
+            width: 80%;
+        }
+        
+        .skeleton-badge {
+            width: 60px;
+            height: 24px;
+            border-radius: 12px;
+        }
+        
+        @keyframes skeleton-loading {
+            0% {
+                background-position: 200% 0;
+            }
+            100% {
+                background-position: -200% 0;
+            }
+        }
+        
+        .skeleton-row {
+            opacity: 0.7;
+        }
+        
+        .skeleton-row td {
+            padding: 15px 8px;
+        }
         /* Ensure all table content is visible */
         .table td * {
             color: #e8e8e8 !important;

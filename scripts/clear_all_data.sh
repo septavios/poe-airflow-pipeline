@@ -9,13 +9,13 @@ echo "======================================"
 # Step 1: Clear POE database tables
 echo "📊 Clearing POE database tables..."
 docker-compose exec -T postgres psql -U airflow -d airflow -c "
-TRUNCATE TABLE poe_currency_data;
-TRUNCATE TABLE poe_skill_gems_data;
-TRUNCATE TABLE poe_divination_cards_data;
-TRUNCATE TABLE poe_unique_items_data;
-TRUNCATE TABLE poe_market_summary;
-TRUNCATE TABLE poe_profit_opportunities;
-TRUNCATE TABLE poe_extraction_log;
+TRUNCATE TABLE poe_currency_data CASCADE;
+TRUNCATE TABLE poe_skill_gems_data CASCADE;
+TRUNCATE TABLE poe_divination_cards_data CASCADE;
+TRUNCATE TABLE poe_unique_items_data CASCADE;
+TRUNCATE TABLE poe_market_summary CASCADE;
+TRUNCATE TABLE poe_profit_opportunities CASCADE;
+TRUNCATE TABLE poe_extraction_log CASCADE;
 " > /dev/null 2>&1
 
 if [ $? -eq 0 ]; then

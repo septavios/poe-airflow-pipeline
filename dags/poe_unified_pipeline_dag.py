@@ -34,7 +34,7 @@ dag = DAG(
 )
 
 # Configuration
-LEAGUE = os.getenv('POE_LEAGUE', 'Settlers')  # Read from environment variable, fallback to 'Settlers'
+LEAGUE = os.getenv('POE_LEAGUE', 'Mercenaries')  # Read from environment variable, fallback to 'Mercenaries'
 BASE_URL = 'https://poe.ninja/api/data'
 DATA_DIR = '/opt/airflow/logs/poe_data'  # Store data in logs directory
 OUTPUT_DIR = '/opt/airflow/logs/poe_analytics'
@@ -97,40 +97,197 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
         response.raise_for_status()
         data = response.json()
         
-        # Extract relevant currency information
+        # Create a mapping of currency details for image URLs and trade IDs
+        currency_details_map = {}
+        for detail in data.get('currencyDetails', []):
+            currency_details_map[detail.get('name')] = {
+                'icon_url': detail.get('icon'),
+                'trade_id': detail.get('tradeId'),
+                'currency_id': detail.get('id')
+            }
+        
+        # Extract relevant currency information with enhanced data capture
         currency_data = []
         for line in data.get('lines', []):
+            # Extract pay and receive data separately for better analysis
+            pay_data = line.get('pay', {})
+            receive_data = line.get('receive', {})
+            
+            # Get currency details (icon, trade_id) from the mapping
+            currency_name = line.get('currencyTypeName')
+            currency_details = currency_details_map.get(currency_name, {})
+            
+            # Calculate buy/sell prices and gaps
+            buy_price = pay_data.get('value', 0)  # What you pay to buy
+            sell_price = receive_data.get('value', 0)  # What you receive when selling
+            
+            # Calculate price gap (difference between sell and buy prices)
+            price_gap_absolute = 0
+            price_gap_percentage = 0
+            
+            if buy_price > 0 and sell_price > 0:
+                price_gap_absolute = abs(sell_price - buy_price)
+                # Calculate percentage gap relative to the average price
+                avg_price = (buy_price + sell_price) / 2
+                if avg_price > 0:
+                    price_gap_percentage = (price_gap_absolute / avg_price) * 100
+            
             currency_info = {
-                'currency_name': line.get('currencyTypeName'),
+                'currency_name': currency_name,
                 'chaos_value': line.get('chaosEquivalent', 0),
+                'chaos_equivalent': line.get('chaosEquivalent', 0),
                 'details_id': line.get('detailsId'),
                 'count': line.get('count', 0),
-                'listing_count': line.get('receive', {}).get('listing_count', 0),
-                'icon_url': line.get('icon'),
-                'trade_info': line.get('pay', {}),
-                'sparkline': line.get('sparkline', {}),
+                'icon_url': currency_details.get('icon_url'),
+                'trade_id': currency_details.get('trade_id'),
                 'low_confidence': line.get('lowConfidence', False),
+                
+                # Buy/Sell price analysis
+                'buy_price': buy_price,
+                'sell_price': sell_price,
+                'price_gap_absolute': price_gap_absolute,
+                'price_gap_percentage': price_gap_percentage,
+                
+                # Enhanced pay/receive data capture
+                'pay_data': {
+                    'id': pay_data.get('id', 0),
+                    'league_id': pay_data.get('league_id'),
+                    'pay_currency_id': pay_data.get('pay_currency_id'),
+                    'get_currency_id': pay_data.get('get_currency_id'),
+                    'sample_time_utc': pay_data.get('sample_time_utc'),
+                    'count': pay_data.get('count', 0),
+                    'value': pay_data.get('value', 0),
+                    'data_point_count': pay_data.get('data_point_count', 0),
+                    'includes_secondary': pay_data.get('includes_secondary', False),
+                    'listing_count': pay_data.get('listing_count', 0)
+                },
+                'receive_data': {
+                    'id': receive_data.get('id', 0),
+                    'league_id': receive_data.get('league_id'),
+                    'pay_currency_id': receive_data.get('pay_currency_id'),
+                    'get_currency_id': receive_data.get('get_currency_id'),
+                    'sample_time_utc': receive_data.get('sample_time_utc'),
+                    'count': receive_data.get('count', 0),
+                    'value': receive_data.get('value', 0),
+                    'data_point_count': receive_data.get('data_point_count', 0),
+                    'includes_secondary': receive_data.get('includes_secondary', False),
+                    'listing_count': receive_data.get('listing_count', 0)
+                },
+                
+                # Enhanced sparkline data capture
+                'pay_sparkline': line.get('paySparkLine', {}),
+                'receive_sparkline': line.get('receiveSparkLine', {}),
+                'low_confidence_pay_sparkline': line.get('lowConfidencePaySparkLine', {}),
+                'low_confidence_receive_sparkline': line.get('lowConfidenceReceiveSparkLine', {}),
+                
+                # Legacy sparkline for backward compatibility
+                'sparkline': line.get('sparkline', {}),
+                
+                # Extract aggregated data point count and includes_secondary from pay/receive data
+                'data_point_count': max(
+                    pay_data.get('data_point_count', 0),
+                    receive_data.get('data_point_count', 0)
+                ),
+                'includes_secondary': (
+                    pay_data.get('includes_secondary', False) or 
+                    receive_data.get('includes_secondary', False)
+                ),
+                
                 'timestamp': datetime.now().isoformat()
             }
             currency_data.append(currency_info)
         
-        # Insert into database
+        # Insert comprehensive currency details into the currency_details table
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # First, insert/update currency details
+                for detail in data.get('currencyDetails', []):
+                    cur.execute("""
+                        INSERT INTO poe_currency_details (currency_id, currency_name, icon_url, trade_id, updated_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (currency_id) DO UPDATE SET
+                            currency_name = EXCLUDED.currency_name,
+                            icon_url = EXCLUDED.icon_url,
+                            trade_id = EXCLUDED.trade_id,
+                            updated_at = EXCLUDED.updated_at
+                    """, (
+                        detail.get('id'),
+                        detail.get('name'),
+                        detail.get('icon'),
+                        detail.get('tradeId'),
+                        datetime.now()
+                    ))
+                
+                # Insert comprehensive currency data with all fields
                 for item in currency_data:
+                    # Calculate total listing count from both pay and receive data
+                    total_listing_count = (
+                        item['pay_data'].get('listing_count', 0) + 
+                        item['receive_data'].get('listing_count', 0)
+                    )
+                    
+                    # Extract sparkline total changes
+                    pay_total_change = item['pay_sparkline'].get('totalChange', 0)
+                    receive_total_change = item['receive_sparkline'].get('totalChange', 0)
+                    low_conf_pay_total_change = item['low_confidence_pay_sparkline'].get('totalChange', 0)
+                    low_conf_receive_total_change = item['low_confidence_receive_sparkline'].get('totalChange', 0)
+                    
+                    # Get currency_id from currency_details_map
+                    currency_details = currency_details_map.get(item['currency_name'], {})
+                    currency_id = currency_details.get('currency_id')
+                    
+                    # Extract sample time from pay data (use receive if pay is not available)
+                    sample_time_utc = None
+                    if item['pay_data'].get('sample_time_utc'):
+                        sample_time_utc = item['pay_data']['sample_time_utc']
+                    elif item['receive_data'].get('sample_time_utc'):
+                        sample_time_utc = item['receive_data']['sample_time_utc']
+                    
+                    # Extract league_id from pay or receive data
+                    league_id = item['pay_data'].get('league_id') or item['receive_data'].get('league_id')
+                    
                     cur.execute("""
                         INSERT INTO poe_currency_data 
-                        (currency_name, chaos_value, details_id, count, listing_count, icon_url, trade_info, sparkline, low_confidence, league, extracted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (currency_name, chaos_value, chaos_equivalent, details_id, count, listing_count, 
+                         icon_url, trade_info, sparkline, pay_sparkline, receive_sparkline, 
+                         low_confidence_pay_sparkline, low_confidence_receive_sparkline, 
+                         low_confidence, league, extracted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         item['currency_name'],
                         item['chaos_value'],
+                        item['chaos_equivalent'],
                         item['details_id'],
                         item['count'],
-                        item['listing_count'],
+                        total_listing_count,
                         item['icon_url'],
-                        json.dumps(item['trade_info']),
-                        json.dumps(item['sparkline']),
+                        json.dumps({
+                            'pay_data': item['pay_data'],
+                            'receive_data': item['receive_data'],
+                            'buy_price': item['buy_price'],
+                            'sell_price': item['sell_price'],
+                            'price_gap_absolute': item['price_gap_absolute'],
+                            'price_gap_percentage': item['price_gap_percentage'],
+                            'trade_id': item['trade_id'],
+                            'currency_id': currency_id,
+                            'league_id': league_id,
+                            'sample_time_utc': sample_time_utc,
+                            'pay_count': item['pay_data'].get('count', 0),
+                            'receive_count': item['receive_data'].get('count', 0),
+                            'pay_listing_count': item['pay_data'].get('listing_count', 0),
+                            'receive_listing_count': item['receive_data'].get('listing_count', 0),
+                            'total_change_pay': pay_total_change,
+                            'total_change_receive': receive_total_change,
+                            'total_change_low_confidence_pay': low_conf_pay_total_change,
+                            'total_change_low_confidence_receive': low_conf_receive_total_change,
+                            'data_point_count': item['data_point_count'],
+                            'includes_secondary': item['includes_secondary']
+                        }),
+                        json.dumps(item['sparkline']),  # Keep legacy sparkline for compatibility
+                        json.dumps(item['pay_sparkline']),
+                        json.dumps(item['receive_sparkline']),
+                        json.dumps(item['low_confidence_pay_sparkline']),
+                        json.dumps(item['low_confidence_receive_sparkline']),
                         item['low_confidence'],
                         LEAGUE,
                         datetime.now()
@@ -387,6 +544,162 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
 # ============================================================================
 # TRANSFORMATION FUNCTIONS
 # ============================================================================
+
+def transform_currency_to_analytics(**context) -> Dict[str, Any]:
+    """Transform currency data from trade_info JSONB to optimized analytics table"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # First, ensure the analytics table exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS poe_currency_analytics (
+                    id SERIAL PRIMARY KEY,
+                    currency_data_id INTEGER REFERENCES poe_currency_data(id),
+                    currency_name VARCHAR(100) NOT NULL,
+                    league VARCHAR(50) NOT NULL,
+                    extracted_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    buy_price DECIMAL(15,8),
+                    sell_price DECIMAL(15,8),
+                    price_gap_absolute DECIMAL(15,8),
+                    price_gap_percentage DECIMAL(8,4),
+                    pay_count INTEGER,
+                    receive_count INTEGER,
+                    pay_listing_count INTEGER,
+                    receive_listing_count INTEGER,
+                    total_listing_count INTEGER,
+                    pay_currency_id INTEGER,
+                    receive_currency_id INTEGER,
+                    currency_id INTEGER,
+                    trade_id VARCHAR(100),
+                    data_point_count INTEGER,
+                    includes_secondary BOOLEAN DEFAULT FALSE,
+                    low_confidence BOOLEAN DEFAULT FALSE,
+                    sample_time_utc TIMESTAMP WITH TIME ZONE,
+                    league_id INTEGER,
+                    total_change_pay DECIMAL(10,4),
+                    total_change_receive DECIMAL(10,4),
+                    total_change_low_confidence_pay DECIMAL(10,4),
+                    total_change_low_confidence_receive DECIMAL(10,4),
+                    liquidity_score DECIMAL(15,4),
+                    market_depth_score DECIMAL(15,4),
+                    volatility_index DECIMAL(10,4),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Get recent currency data that hasn't been transformed yet
+            cursor.execute("""
+                SELECT cd.id, cd.currency_name, cd.league, cd.extracted_at, cd.trade_info, 
+                       cd.listing_count, cd.low_confidence, cd.data_point_count, cd.includes_secondary
+                FROM poe_currency_data cd
+                LEFT JOIN poe_currency_analytics ca ON cd.id = ca.currency_data_id
+                WHERE cd.extracted_at >= NOW() - INTERVAL '2 hours'
+                  AND cd.trade_info IS NOT NULL
+                  AND ca.id IS NULL
+                ORDER BY cd.extracted_at DESC
+            """)
+            
+            rows = cursor.fetchall()
+            transformed_count = 0
+            
+            for row in rows:
+                currency_data_id, currency_name, league, extracted_at, trade_info, listing_count, low_confidence, data_point_count, includes_secondary = row
+                
+                if not trade_info:
+                    continue
+                    
+                # Extract data from trade_info JSONB
+                buy_price = trade_info.get('buy_price')
+                sell_price = trade_info.get('sell_price')
+                price_gap_absolute = trade_info.get('price_gap_absolute')
+                price_gap_percentage = trade_info.get('price_gap_percentage')
+                pay_count = trade_info.get('pay_count', 0)
+                receive_count = trade_info.get('receive_count', 0)
+                pay_listing_count = trade_info.get('pay_listing_count', 0)
+                receive_listing_count = trade_info.get('receive_listing_count', 0)
+                pay_currency_id = trade_info.get('pay_data', {}).get('pay_currency_id')
+                receive_currency_id = trade_info.get('receive_data', {}).get('get_currency_id')
+                currency_id = trade_info.get('currency_id')
+                trade_id = trade_info.get('trade_id')
+                sample_time_utc = trade_info.get('sample_time_utc')
+                league_id = trade_info.get('league_id')
+                total_change_pay = trade_info.get('total_change_pay')
+                total_change_receive = trade_info.get('total_change_receive')
+                total_change_low_confidence_pay = trade_info.get('total_change_low_confidence_pay')
+                total_change_low_confidence_receive = trade_info.get('total_change_low_confidence_receive')
+                
+                # Calculate derived metrics
+                market_depth_score = (pay_count or 0) + (receive_count or 0)
+                
+                # Calculate liquidity score: log(listing_count) * price
+                import math
+                if listing_count and listing_count > 0 and buy_price and buy_price > 0:
+                    liquidity_score = math.log1p(listing_count) * float(buy_price)
+                else:
+                    liquidity_score = 0
+                
+                # Calculate volatility index (normalized price gap)
+                if price_gap_percentage and price_gap_percentage > 0:
+                    volatility_index = min(float(price_gap_percentage) / 100.0, 2.0)  # Cap at 200%
+                else:
+                    volatility_index = 0
+                
+                # Parse sample_time_utc if it's a string
+                if isinstance(sample_time_utc, str):
+                    try:
+                        from datetime import datetime
+                        sample_time_utc = datetime.fromisoformat(sample_time_utc.replace('Z', '+00:00'))
+                    except:
+                        sample_time_utc = None
+                
+                # Insert into analytics table
+                cursor.execute("""
+                    INSERT INTO poe_currency_analytics (
+                        currency_data_id, currency_name, league, extracted_at,
+                        buy_price, sell_price, price_gap_absolute, price_gap_percentage,
+                        pay_count, receive_count, pay_listing_count, receive_listing_count,
+                        total_listing_count, pay_currency_id, receive_currency_id, currency_id,
+                        trade_id, data_point_count, includes_secondary, low_confidence,
+                        sample_time_utc, league_id, total_change_pay, total_change_receive,
+                        total_change_low_confidence_pay, total_change_low_confidence_receive,
+                        liquidity_score, market_depth_score, volatility_index
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                """, (
+                    currency_data_id, currency_name, league, extracted_at,
+                    buy_price, sell_price, price_gap_absolute, price_gap_percentage,
+                    pay_count, receive_count, pay_listing_count, receive_listing_count,
+                    listing_count, pay_currency_id, receive_currency_id, currency_id,
+                    trade_id, data_point_count, includes_secondary, low_confidence,
+                    sample_time_utc, league_id, total_change_pay, total_change_receive,
+                    total_change_low_confidence_pay, total_change_low_confidence_receive,
+                    liquidity_score, market_depth_score, volatility_index
+                ))
+                
+                transformed_count += 1
+            
+            conn.commit()
+            
+            # Refresh materialized view if it exists
+            try:
+                cursor.execute("REFRESH MATERIALIZED VIEW currency_hourly_metrics")
+                conn.commit()
+            except:
+                pass  # View might not exist yet
+            
+            print(f"Transformed {transformed_count} currency records to analytics table")
+            log_transformation('currency_analytics', transformed_count, 'success')
+            
+            return {'transformed_records': transformed_count}
+            
+    except Exception as e:
+        print(f"Error in currency analytics transformation: {e}")
+        log_transformation('currency_analytics', 0, 'error', str(e))
+        raise
 
 def transform_currency_data(**context) -> Dict[str, Any]:
     """Transform currency data for market analysis"""
@@ -726,6 +1039,13 @@ transform_currency_task = PythonOperator(
     dag=dag,
 )
 
+# Currency analytics transformation (hybrid approach)
+transform_currency_analytics_task = PythonOperator(
+    task_id='transform_currency_analytics',
+    python_callable=transform_currency_to_analytics,
+    dag=dag,
+)
+
 transform_gems_task = PythonOperator(
     task_id='transform_gems_data',
     python_callable=transform_gems_data,
@@ -748,7 +1068,8 @@ setup_task >> [extract_currency_task, extract_gems_task, extract_cards_task, ext
 
 # Transformation tasks depend on their respective extraction tasks
 extract_currency_task >> transform_currency_task
+extract_currency_task >> transform_currency_analytics_task
 extract_gems_task >> transform_gems_task
 
 # Market summary depends on all transformation tasks
-[transform_currency_task, transform_gems_task] >> market_summary_task
+[transform_currency_task, transform_currency_analytics_task, transform_gems_task] >> market_summary_task

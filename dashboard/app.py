@@ -3,8 +3,14 @@ import psycopg2
 import os
 from datetime import datetime, timedelta
 import json
+from functools import lru_cache
+import time
 
 app = Flask(__name__)
+
+# Simple in-memory cache for Divine Orb values
+divine_orb_cache = {}
+CACHE_DURATION = 300  # 5 minutes
 
 from urllib.parse import urlparse
 
@@ -66,6 +72,39 @@ def execute_query(query, params=None):
         if conn:
             conn.close()
 
+def get_cached_divine_orb_value(league):
+    """Get Divine Orb value with caching"""
+    cache_key = f"divine_orb_{league}"
+    current_time = time.time()
+    
+    # Check if we have a cached value that's still valid
+    if cache_key in divine_orb_cache:
+        cached_data, timestamp = divine_orb_cache[cache_key]
+        if current_time - timestamp < CACHE_DURATION:
+            return cached_data
+    
+    # Fetch fresh data
+    divine_orb_query = """
+        SELECT chaos_value as divine_chaos_value
+        FROM poe_currency_data 
+        WHERE currency_name = 'Divine Orb'
+        AND league = %s
+        AND extracted_at >= NOW() - INTERVAL '7 days'
+        ORDER BY extracted_at DESC
+        LIMIT 1
+    """
+    
+    divine_orb_data = execute_query(divine_orb_query, [league])
+    if divine_orb_data and divine_orb_data[0]['divine_chaos_value'] is not None:
+        divine_chaos_value = divine_orb_data[0]['divine_chaos_value']
+    else:
+        divine_chaos_value = 1  # Default fallback value
+    
+    # Cache the result
+    divine_orb_cache[cache_key] = (divine_chaos_value, current_time)
+    
+    return divine_chaos_value
+
 @app.route('/')
 def dashboard():
     """Main dashboard page"""
@@ -113,45 +152,71 @@ def dashboard():
 
 @app.route('/currency')
 def currency_data():
-    """Currency data page"""
-    # Get league parameter, default to 'Mercenaries'
+    """Currency data page with pagination"""
+    # Get parameters
     league = request.args.get('league', 'Mercenaries')
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 50))
     
-    # First get the Divine Orb value for conversion
-    divine_orb_query = """
-        SELECT chaos_value as divine_chaos_value
+    # Calculate offset
+    offset = (page - 1) * per_page
+    
+    # Get the Divine Orb value for conversion using cache
+    divine_chaos_value = get_cached_divine_orb_value(league)
+    
+    # Get total count for pagination
+    count_query = """
+        SELECT COUNT(*) as total
         FROM poe_currency_data 
-        WHERE currency_name = 'Divine Orb'
+        WHERE extracted_at >= NOW() - INTERVAL '7 days'
         AND league = %s
-        AND extracted_at >= NOW() - INTERVAL '7 days'
-        ORDER BY extracted_at DESC
-        LIMIT 1
     """
     
-    divine_orb_data = execute_query(divine_orb_query, [league])
-    divine_chaos_value = divine_orb_data[0]['divine_chaos_value'] if divine_orb_data else 1
+    total_result = execute_query(count_query, [league])
+    total_items = total_result[0]['total'] if total_result else 0
     
+    # Get paginated data with enhanced fields including buy/sell prices and images
     query = """
-        SELECT currency_name, chaos_value, 
-               sparkline, 
-               low_confidence, count, extracted_at
+        SELECT currency_name, chaos_value, chaos_equivalent,
+               sparkline, pay_sparkline, receive_sparkline,
+               low_confidence_pay_sparkline, low_confidence_receive_sparkline,
+               low_confidence, count, listing_count, data_point_count,
+               includes_secondary, trade_info, extracted_at,
+               buy_price, sell_price, price_gap_percentage, price_gap_absolute,
+               icon_url, trade_id
         FROM poe_currency_data 
         WHERE extracted_at >= NOW() - INTERVAL '7 days'
         AND league = %s
         ORDER BY chaos_value DESC
-        LIMIT 100
+        LIMIT %s OFFSET %s
     """
     
-    data = execute_query(query, [league])
+    data = execute_query(query, [league, per_page, offset])
     
     # Calculate Divine Value for each currency
     for item in data:
-        if item['chaos_value'] and divine_chaos_value:
+        if item['chaos_value'] is not None and divine_chaos_value and divine_chaos_value > 0:
             item['divine_value'] = round(item['chaos_value'] / divine_chaos_value, 2)
         else:
             item['divine_value'] = 0
     
-    return render_template('currency.html', currency_data=data, league=league, divine_chaos_value=divine_chaos_value)
+    # Calculate pagination info
+    total_pages = (total_items + per_page - 1) // per_page
+    has_prev = page > 1
+    has_next = page < total_pages
+    
+    pagination = {
+        'page': page,
+        'per_page': per_page,
+        'total': total_items,
+        'total_pages': total_pages,
+        'has_prev': has_prev,
+        'has_next': has_next,
+        'prev_num': page - 1 if has_prev else None,
+        'next_num': page + 1 if has_next else None
+    }
+    
+    return render_template('currency.html', currency_data=data, pagination=pagination, league=league, divine_chaos_value=divine_chaos_value)
 
 @app.route('/gems')
 def gems_data():
