@@ -40,33 +40,39 @@ def execute_query(query, params=None):
     conn = get_db_connection()
     if not conn:
         return []
-    
+
     try:
         cursor = conn.cursor()
         cursor.execute(query, params or [])
-        
-        # Get column names
-        columns = [desc[0] for desc in cursor.description]
-        
-        # Fetch all results
-        rows = cursor.fetchall()
-        
-        # Convert to list of dictionaries
+
         result = []
-        for row in rows:
-            row_dict = {}
-            for i, value in enumerate(row):
-                if isinstance(value, datetime):
-                    row_dict[columns[i]] = value.isoformat()
-                elif hasattr(value, '__class__') and value.__class__.__name__ == 'Decimal':
-                    row_dict[columns[i]] = float(value)
-                else:
-                    row_dict[columns[i]] = value
-            result.append(row_dict)
-        
+        if cursor.description:
+            # Get column names when a result set is returned
+            columns = [desc[0] for desc in cursor.description]
+
+            # Fetch all results
+            rows = cursor.fetchall()
+
+            # Convert to list of dictionaries
+            for row in rows:
+                row_dict = {}
+                for i, value in enumerate(row):
+                    if isinstance(value, datetime):
+                        row_dict[columns[i]] = value.isoformat()
+                    elif hasattr(value, '__class__') and value.__class__.__name__ == 'Decimal':
+                        row_dict[columns[i]] = float(value)
+                    else:
+                        row_dict[columns[i]] = value
+                result.append(row_dict)
+
+        # Commit any changes (safe for SELECT queries as well)
+        conn.commit()
+
         return result
     except Exception as e:
         print(f"Query execution error: {e}")
+        if conn:
+            conn.rollback()
         return []
     finally:
         if conn:
