@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import os
 import numpy as np
+import math
 from typing import Dict, List, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -231,6 +232,21 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                     receive_total_change = item['receive_sparkline'].get('totalChange', 0)
                     low_conf_pay_total_change = item['low_confidence_pay_sparkline'].get('totalChange', 0)
                     low_conf_receive_total_change = item['low_confidence_receive_sparkline'].get('totalChange', 0)
+
+                    # Derived metrics for advanced analytics
+                    pay_volatility = (
+                        float(np.std(item['pay_sparkline'].get('data', [])))
+                        if item['pay_sparkline'].get('data') else 0
+                    )
+                    receive_volatility = (
+                        float(np.std(item['receive_sparkline'].get('data', [])))
+                        if item['receive_sparkline'].get('data') else 0
+                    )
+                    average_price_change = (pay_total_change + receive_total_change) / 2
+                    total_count = item['pay_data'].get('count', 0) + item['receive_data'].get('count', 0)
+                    liquidity_score = (
+                        total_listing_count / total_count if total_count > 0 else 0
+                    )
                     
                     # Get currency_id from currency_details_map
                     currency_details = currency_details_map.get(item['currency_name'], {})
@@ -247,12 +263,13 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                     league_id = item['pay_data'].get('league_id') or item['receive_data'].get('league_id')
                     
                     cur.execute("""
-                        INSERT INTO poe_currency_data 
-                        (currency_name, chaos_value, chaos_equivalent, details_id, count, listing_count, 
-                         icon_url, trade_info, sparkline, pay_sparkline, receive_sparkline, 
-                         low_confidence_pay_sparkline, low_confidence_receive_sparkline, 
-                         low_confidence, league, extracted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO poe_currency_data
+                        (currency_name, chaos_value, chaos_equivalent, details_id, count, listing_count,
+                         icon_url, trade_info, sparkline, pay_sparkline, receive_sparkline,
+                         low_confidence_pay_sparkline, low_confidence_receive_sparkline,
+                         low_confidence, league, extracted_at, pay_volatility, receive_volatility,
+                         average_price_change, liquidity_score)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         item['currency_name'],
                         item['chaos_value'],
@@ -281,7 +298,11 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                             'total_change_low_confidence_pay': low_conf_pay_total_change,
                             'total_change_low_confidence_receive': low_conf_receive_total_change,
                             'data_point_count': item['data_point_count'],
-                            'includes_secondary': item['includes_secondary']
+                            'includes_secondary': item['includes_secondary'],
+                            'pay_volatility': pay_volatility,
+                            'receive_volatility': receive_volatility,
+                            'average_price_change': average_price_change,
+                            'liquidity_score': liquidity_score
                         }),
                         json.dumps(item['sparkline']),  # Keep legacy sparkline for compatibility
                         json.dumps(item['pay_sparkline']),
@@ -290,7 +311,11 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                         json.dumps(item['low_confidence_receive_sparkline']),
                         item['low_confidence'],
                         LEAGUE,
-                        datetime.now()
+                        datetime.now(),
+                        pay_volatility,
+                        receive_volatility,
+                        average_price_change,
+                        liquidity_score
                     ))
             conn.commit()
         
@@ -634,7 +659,6 @@ def transform_currency_to_analytics(**context) -> Dict[str, Any]:
                 market_depth_score = (pay_count or 0) + (receive_count or 0)
                 
                 # Calculate liquidity score: log(listing_count) * price
-                import math
                 if listing_count and listing_count > 0 and buy_price and buy_price > 0:
                     liquidity_score = math.log1p(listing_count) * float(buy_price)
                 else:
@@ -649,9 +673,8 @@ def transform_currency_to_analytics(**context) -> Dict[str, Any]:
                 # Parse sample_time_utc if it's a string
                 if isinstance(sample_time_utc, str):
                     try:
-                        from datetime import datetime
                         sample_time_utc = datetime.fromisoformat(sample_time_utc.replace('Z', '+00:00'))
-                    except:
+                    except Exception:
                         sample_time_utc = None
                 
                 # Insert into analytics table
