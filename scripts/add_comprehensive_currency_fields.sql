@@ -18,7 +18,11 @@ ADD COLUMN IF NOT EXISTS receive_listing_count INTEGER,
 ADD COLUMN IF NOT EXISTS total_change_pay DECIMAL(10,4),
 ADD COLUMN IF NOT EXISTS total_change_receive DECIMAL(10,4),
 ADD COLUMN IF NOT EXISTS total_change_low_confidence_pay DECIMAL(10,4),
-ADD COLUMN IF NOT EXISTS total_change_low_confidence_receive DECIMAL(10,4);
+ADD COLUMN IF NOT EXISTS total_change_low_confidence_receive DECIMAL(10,4),
+ADD COLUMN IF NOT EXISTS pay_volatility DECIMAL(10,4),
+ADD COLUMN IF NOT EXISTS receive_volatility DECIMAL(10,4),
+ADD COLUMN IF NOT EXISTS average_price_change DECIMAL(10,4),
+ADD COLUMN IF NOT EXISTS liquidity_score DECIMAL(15,4);
 
 -- Add indexes for the new fields to improve query performance
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_buy_price ON poe_currency_data(buy_price);
@@ -28,6 +32,8 @@ CREATE INDEX IF NOT EXISTS idx_poe_currency_data_trade_id ON poe_currency_data(t
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_currency_id ON poe_currency_data(currency_id);
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_league_id ON poe_currency_data(league_id);
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_sample_time ON poe_currency_data(sample_time_utc);
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_avg_price_change ON poe_currency_data(average_price_change);
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_liquidity_score ON poe_currency_data(liquidity_score);
 
 -- Create a new table to store currency details metadata
 CREATE TABLE IF NOT EXISTS poe_currency_details (
@@ -74,6 +80,10 @@ SELECT
     cd.total_change_receive,
     cd.total_change_low_confidence_pay,
     cd.total_change_low_confidence_receive,
+    cd.pay_volatility,
+    cd.receive_volatility,
+    cd.average_price_change,
+    cd.liquidity_score,
     cd.trade_info,
     cd.sparkline,
     cd.pay_sparkline,
@@ -112,8 +122,12 @@ SELECT DISTINCT ON (currency_name)
     includes_secondary,
     total_change_pay,
     total_change_receive,
+    pay_volatility,
+    receive_volatility,
+    average_price_change,
+    liquidity_score,
     extracted_at
-FROM poe_currency_data 
+FROM poe_currency_data
 ORDER BY currency_name, extracted_at DESC;
 
 -- Create a view for currency arbitrage opportunities
@@ -140,6 +154,3 @@ WHERE price_gap_percentage > 0
 ORDER BY price_gap_percentage DESC;
 
 COMMIT;
-
--- Display success message
-SELECT 'Migration completed successfully. Added comprehensive currency data fields.' as status;
