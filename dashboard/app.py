@@ -314,6 +314,66 @@ def profit_opportunities():
     data = execute_query(query)
     return render_template('profit.html', profit_data=data)
 
+@app.route('/arbitrage')
+def arbitrage_opportunities():
+    """Display arbitrage opportunities page"""
+    try:
+        # Get league from query parameter
+        league = request.args.get('league', 'mercenaries')
+        
+        # Fetch arbitrage opportunities data
+        arbitrage_data = execute_query("""
+            SELECT 
+                currency_name,
+                buy_price_chaos,
+                sell_price_chaos,
+                spread_chaos,
+                spread_percentage,
+                listing_count_difference,
+                arbitrage_opportunity,
+                pay_listing_count,
+                receive_listing_count,
+                confidence_score,
+                extracted_at
+            FROM poe_arbitrage_opportunities 
+            WHERE league = %s 
+            AND extracted_at >= NOW() - INTERVAL '24 hours'
+            ORDER BY spread_percentage DESC, confidence_score DESC
+            LIMIT 100
+        """, [league])
+        
+        # Get summary statistics
+        summary_stats = execute_query("""
+            SELECT 
+                COUNT(*) as total_currencies,
+                COUNT(CASE WHEN arbitrage_opportunity = true THEN 1 END) as profitable_opportunities,
+                AVG(spread_percentage) as avg_spread_percentage,
+                MAX(spread_percentage) as max_spread_percentage,
+                AVG(confidence_score) as avg_confidence_score
+            FROM poe_arbitrage_opportunities 
+            WHERE league = %s 
+            AND extracted_at >= NOW() - INTERVAL '24 hours'
+        """, [league])
+        
+        stats = summary_stats[0] if summary_stats else {
+            'total_currencies': 0,
+            'profitable_opportunities': 0,
+            'avg_spread_percentage': 0,
+            'max_spread_percentage': 0,
+            'avg_confidence_score': 0
+        }
+        
+        return render_template('arbitrage.html', 
+                             arbitrage_data=arbitrage_data, 
+                             stats=stats,
+                             league=league)
+    except Exception as e:
+        print(f"Error in arbitrage_opportunities: {e}")
+        return render_template('arbitrage.html', 
+                             arbitrage_data=[], 
+                             stats={},
+                             league='mercenaries')
+
 @app.route('/market-summary')
 def market_summary():
     """Market summary page"""
@@ -377,6 +437,32 @@ def profit_chart_data():
     
     data = execute_query(query)
     return jsonify(data)
+
+@app.route('/api/arbitrage-chart')
+def arbitrage_chart_data():
+    """API endpoint for arbitrage chart data"""
+    try:
+        league = request.args.get('league', 'mercenaries')
+        
+        data = execute_query("""
+            SELECT 
+                currency_name, 
+                spread_percentage, 
+                confidence_score,
+                buy_price_chaos,
+                sell_price_chaos
+            FROM poe_arbitrage_opportunities 
+            WHERE league = %s 
+            AND arbitrage_opportunity = true
+            AND extracted_at >= NOW() - INTERVAL '24 hours'
+            ORDER BY spread_percentage DESC 
+            LIMIT 20
+        """, [league])
+        
+        return jsonify(data)
+    except Exception as e:
+        print(f"Error in arbitrage_chart_data: {e}")
+        return jsonify([])
 
 @app.route('/api/leagues')
 def get_leagues():

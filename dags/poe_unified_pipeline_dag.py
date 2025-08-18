@@ -118,20 +118,41 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
             currency_name = line.get('currencyTypeName')
             currency_details = currency_details_map.get(currency_name, {})
             
-            # Calculate buy/sell prices and gaps
+            # Calculate buy/sell prices and gaps using chaos values when appropriate
+            # Currency ID 22 represents Chaos Orb, so we should use those values for chaos calculations
+            chaos_buy_price = 0
+            chaos_sell_price = 0
+            
+            # Determine chaos values based on currency IDs
+            if pay_data.get('get_currency_id') == 22:  # Getting chaos orbs
+                chaos_buy_price = 1 / pay_data.get('value', 1) if pay_data.get('value', 0) > 0 else 0
+            elif pay_data.get('pay_currency_id') == 22:  # Paying with chaos orbs
+                chaos_buy_price = pay_data.get('value', 0)
+            
+            if receive_data.get('get_currency_id') == 22:  # Getting chaos orbs
+                chaos_sell_price = 1 / receive_data.get('value', 1) if receive_data.get('value', 0) > 0 else 0
+            elif receive_data.get('pay_currency_id') == 22:  # Paying with chaos orbs
+                chaos_sell_price = receive_data.get('value', 0)
+            
+            # Use chaos equivalent as fallback if no direct chaos trades
+            if chaos_buy_price == 0 and chaos_sell_price == 0:
+                chaos_buy_price = line.get('chaosEquivalent', 0)
+                chaos_sell_price = line.get('chaosEquivalent', 0)
+            
+            # Raw buy/sell prices for reference
             buy_price = pay_data.get('value', 0)  # What you pay to buy
             sell_price = receive_data.get('value', 0)  # What you receive when selling
             
-            # Calculate price gap (difference between sell and buy prices)
+            # Calculate price gap using chaos values
             price_gap_absolute = 0
             price_gap_percentage = 0
             
-            if buy_price > 0 and sell_price > 0:
-                price_gap_absolute = abs(sell_price - buy_price)
-                # Calculate percentage gap relative to the average price
-                avg_price = (buy_price + sell_price) / 2
-                if avg_price > 0:
-                    price_gap_percentage = (price_gap_absolute / avg_price) * 100
+            if chaos_buy_price > 0 and chaos_sell_price > 0:
+                price_gap_absolute = abs(chaos_sell_price - chaos_buy_price)
+                # Calculate percentage gap relative to the average chaos price
+                avg_chaos_price = (chaos_buy_price + chaos_sell_price) / 2
+                if avg_chaos_price > 0:
+                    price_gap_percentage = (price_gap_absolute / avg_chaos_price) * 100
             
             currency_info = {
                 'currency_name': currency_name,
@@ -143,9 +164,11 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                 'trade_id': currency_details.get('trade_id'),
                 'low_confidence': line.get('lowConfidence', False),
                 
-                # Buy/Sell price analysis
+                # Buy/Sell price analysis (chaos-based)
                 'buy_price': buy_price,
                 'sell_price': sell_price,
+                'chaos_buy_price': chaos_buy_price,
+                'chaos_sell_price': chaos_sell_price,
                 'price_gap_absolute': price_gap_absolute,
                 'price_gap_percentage': price_gap_percentage,
                 
@@ -227,23 +250,26 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                         item['receive_data'].get('listing_count', 0)
                     )
                     
-                    # Extract sparkline total changes
-                    pay_total_change = item['pay_sparkline'].get('totalChange', 0)
-                    receive_total_change = item['receive_sparkline'].get('totalChange', 0)
-                    low_conf_pay_total_change = item['low_confidence_pay_sparkline'].get('totalChange', 0)
-                    low_conf_receive_total_change = item['low_confidence_receive_sparkline'].get('totalChange', 0)
+                    # Extract sparkline total changes with proper None handling
+                    pay_total_change = item['pay_sparkline'].get('totalChange') or 0
+                    receive_total_change = item['receive_sparkline'].get('totalChange') or 0
+                    low_conf_pay_total_change = item['low_confidence_pay_sparkline'].get('totalChange') or 0
+                    low_conf_receive_total_change = item['low_confidence_receive_sparkline'].get('totalChange') or 0
 
-                    # Derived metrics for advanced analytics
+                    # Derived metrics for advanced analytics with proper None handling
+                    pay_sparkline_data = item['pay_sparkline'].get('data', [])
+                    receive_sparkline_data = item['receive_sparkline'].get('data', [])
+                    
                     pay_volatility = (
-                        float(np.std(item['pay_sparkline'].get('data', [])))
-                        if item['pay_sparkline'].get('data') else 0
+                        float(np.std(pay_sparkline_data))
+                        if pay_sparkline_data and len(pay_sparkline_data) > 0 and all(x is not None for x in pay_sparkline_data) else 0
                     )
                     receive_volatility = (
-                        float(np.std(item['receive_sparkline'].get('data', [])))
-                        if item['receive_sparkline'].get('data') else 0
+                        float(np.std(receive_sparkline_data))
+                        if receive_sparkline_data and len(receive_sparkline_data) > 0 and all(x is not None for x in receive_sparkline_data) else 0
                     )
                     average_price_change = (pay_total_change + receive_total_change) / 2
-                    total_count = item['pay_data'].get('count', 0) + item['receive_data'].get('count', 0)
+                    total_count = (item['pay_data'].get('count') or 0) + (item['receive_data'].get('count') or 0)
                     liquidity_score = (
                         total_listing_count / total_count if total_count > 0 else 0
                     )
@@ -283,6 +309,8 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                             'receive_data': item['receive_data'],
                             'buy_price': item['buy_price'],
                             'sell_price': item['sell_price'],
+                            'chaos_buy_price': item['chaos_buy_price'],
+                            'chaos_sell_price': item['chaos_sell_price'],
                             'price_gap_absolute': item['price_gap_absolute'],
                             'price_gap_percentage': item['price_gap_percentage'],
                             'trade_id': item['trade_id'],
@@ -567,6 +595,361 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
         raise
 
 # ============================================================================
+# ARBITRAGE ANALYSIS FUNCTIONS
+# ============================================================================
+
+def calculate_confidence_score(pay_listing_count: int, receive_listing_count: int, spread_percentage: float) -> tuple[int, bool]:
+    """
+    Calculate confidence score and identify low confidence data based on listing counts and spread.
+    
+    Args:
+        pay_listing_count: Number of pay listings
+        receive_listing_count: Number of receive listings
+        spread_percentage: Arbitrage spread percentage
+        
+    Returns:
+        Tuple of (confidence_score, is_low_confidence)
+    """
+    # Base confidence is the minimum of the two listing counts
+    min_listings = min(pay_listing_count, receive_listing_count)
+    total_listings = pay_listing_count + receive_listing_count
+    
+    # Calculate base confidence score (0-100)
+    if min_listings >= 50:
+        base_score = 90
+    elif min_listings >= 20:
+        base_score = 70
+    elif min_listings >= 10:
+        base_score = 50
+    elif min_listings >= 5:
+        base_score = 30
+    else:
+        base_score = 10
+    
+    # Adjust for listing imbalance (large difference between pay and receive counts)
+    listing_ratio = max(pay_listing_count, receive_listing_count) / max(min_listings, 1)
+    if listing_ratio > 10:  # Very imbalanced
+        base_score -= 20
+    elif listing_ratio > 5:  # Moderately imbalanced
+        base_score -= 10
+    
+    # Adjust for suspicious spreads (very high spreads with low listings are often unreliable)
+    if spread_percentage > 100 and min_listings < 10:
+        base_score -= 30  # Highly suspicious
+    elif spread_percentage > 50 and min_listings < 5:
+        base_score -= 20  # Moderately suspicious
+    
+    # Ensure score is within bounds
+    confidence_score = max(0, min(100, base_score))
+    
+    # Determine if this is low confidence data
+    is_low_confidence = (
+        min_listings < 5 or  # Very few listings on either side
+        confidence_score < 25 or  # Low overall confidence
+        (spread_percentage > 200 and min_listings < 10)  # Extremely high spread with low listings
+    )
+    
+    return confidence_score, is_low_confidence
+
+
+def analyze_arbitrage_opportunities(json_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Analyze arbitrage opportunities from POE Ninja currency data.
+    
+    Args:
+        json_data: Dictionary containing 'lines' and 'currencyDetails'
+        
+    Returns:
+        List of dictionaries with arbitrage analysis results
+    """
+    lines = json_data.get('lines', [])
+    currency_details = json_data.get('currencyDetails', [])
+    
+    # Create currency lookup dictionaries - both by ID and by name
+    currency_lookup_by_id = {detail['id']: detail['name'] for detail in currency_details}
+    currency_lookup_by_name = {detail['name']: detail['id'] for detail in currency_details}
+    
+    arbitrage_results = []
+    
+    for line in lines:
+        currency_name = None
+        currency_id = None
+        
+        try:
+            # Get currency name and ID - handle both string names and integer IDs
+            if 'currencyTypeName' in line:
+                currency_name = line['currencyTypeName']
+                currency_id = currency_lookup_by_name.get(currency_name)
+            elif 'get_currency_id' in line:
+                currency_id = line['get_currency_id']
+                currency_name = currency_lookup_by_id.get(currency_id)
+            elif 'detailsId' in line:
+                # Try to find by detailsId
+                details_id = line['detailsId']
+                for detail in currency_details:
+                    if detail.get('tradeId') == details_id or detail.get('name', '').lower().replace(' ', '-') == details_id:
+                        currency_name = detail['name']
+                        currency_id = detail['id']
+                        break
+            
+            # If we still don't have currency info, skip this line
+            if not currency_name or currency_id is None:
+                print(f"Warning: Could not identify currency for line: {line.get('currencyTypeName', 'Unknown')}")
+                continue
+            
+            # Extract pay and receive data
+            pay_data = line.get('pay', {})
+            receive_data = line.get('receive', {})
+            
+            pay_value = pay_data.get('value', 0)
+            receive_value = receive_data.get('value', 0)
+            pay_listing_count = pay_data.get('listing_count', 0)
+            receive_listing_count = receive_data.get('listing_count', 0)
+            
+            # Validate data - skip if essential data is missing or invalid
+            if not pay_value or not receive_value or pay_value <= 0 or receive_value <= 0:
+                print(f"Warning: Invalid pay/receive values for {currency_name}: pay={pay_value}, receive={receive_value}")
+                continue
+                
+            # Calculate prices and spreads with proper validation
+            try:
+                buy_price = 1 / pay_value
+                sell_price = receive_value
+                spread = sell_price - buy_price
+                
+                # Avoid division by zero and handle edge cases
+                if buy_price > 0:
+                    spread_percentage = (spread / buy_price) * 100
+                else:
+                    spread_percentage = 0
+                    
+                listing_difference = pay_listing_count - receive_listing_count
+                
+                # Enhanced confidence scoring system
+                confidence_score, is_low_confidence = calculate_confidence_score(
+                    pay_listing_count, receive_listing_count, spread_percentage
+                )
+                
+                # Enhanced arbitrage opportunity detection with confidence filtering
+                arbitrage_opportunity = (
+                    sell_price > buy_price and 
+                    spread_percentage > 0.01 and  # At least 0.01% spread
+                    not is_low_confidence  # Filter out low confidence opportunities
+                )
+                
+                arbitrage_results.append({
+                    'currency_name': currency_name,
+                    'currency_id': int(currency_id),  # Ensure integer type
+                    'buy_price_chaos': round(buy_price, 4),
+                    'sell_price_chaos': round(sell_price, 4),
+                    'spread_chaos': round(spread, 4),
+                    'spread_percentage': round(spread_percentage, 2),
+                    'listing_count_difference': listing_difference,
+                    'arbitrage_opportunity': arbitrage_opportunity,
+                    'pay_listing_count': pay_listing_count,
+                    'receive_listing_count': receive_listing_count,
+                    'confidence_score': confidence_score,
+                    'is_low_confidence': is_low_confidence,
+                    'pay_value': pay_value,  # Store original values for debugging
+                    'receive_value': receive_value
+                })
+                
+            except (ZeroDivisionError, ValueError) as calc_error:
+                print(f"Warning: Calculation error for {currency_name}: {str(calc_error)}")
+                continue
+            
+        except Exception as e:
+            print(f"Error processing line for currency {currency_name or 'Unknown'}: {str(e)}")
+            continue
+    
+    # Sort by spread percentage (highest first) for best opportunities
+    arbitrage_results.sort(key=lambda x: x['spread_percentage'], reverse=True)
+    
+    return arbitrage_results
+
+def format_arbitrage_table(arbitrage_results: List[Dict[str, Any]]) -> str:
+    """
+    Format arbitrage results into a readable table string.
+    
+    Args:
+        arbitrage_results: List of arbitrage analysis results
+        
+    Returns:
+        Formatted table string
+    """
+    if not arbitrage_results:
+        return "No arbitrage opportunities found."
+    
+    # Table headers
+    headers = [
+        "Currency Name",
+        "Buy Price (Chaos)", 
+        "Sell Price (Chaos)",
+        "Spread (Chaos)",
+        "Spread %",
+        "Listing Diff",
+        "Arbitrage"
+    ]
+    
+    # Calculate column widths
+    col_widths = [len(header) for header in headers]
+    for result in arbitrage_results:
+        col_widths[0] = max(col_widths[0], len(str(result['currency_name'])))
+        col_widths[1] = max(col_widths[1], len(str(result['buy_price_chaos'])))
+        col_widths[2] = max(col_widths[2], len(str(result['sell_price_chaos'])))
+        col_widths[3] = max(col_widths[3], len(str(result['spread_chaos'])))
+        col_widths[4] = max(col_widths[4], len(f"{result['spread_percentage']:.2f}%"))
+        col_widths[5] = max(col_widths[5], len(str(result['listing_count_difference'])))
+        col_widths[6] = max(col_widths[6], len("Yes" if result['arbitrage_opportunity'] else "No"))
+    
+    # Build table
+    table_lines = []
+    
+    # Header row
+    header_row = " | ".join(header.ljust(width) for header, width in zip(headers, col_widths))
+    table_lines.append(header_row)
+    table_lines.append("-" * len(header_row))
+    
+    # Data rows
+    for result in arbitrage_results:
+        row_data = [
+            str(result['currency_name']).ljust(col_widths[0]),
+            str(result['buy_price_chaos']).ljust(col_widths[1]),
+            str(result['sell_price_chaos']).ljust(col_widths[2]),
+            str(result['spread_chaos']).ljust(col_widths[3]),
+            f"{result['spread_percentage']:.2f}%".ljust(col_widths[4]),
+            str(result['listing_count_difference']).ljust(col_widths[5]),
+            ("Yes" if result['arbitrage_opportunity'] else "No").ljust(col_widths[6])
+        ]
+        table_lines.append(" | ".join(row_data))
+    
+    return "\n".join(table_lines)
+
+def extract_and_analyze_arbitrage(**context) -> Dict[str, Any]:
+    """
+    Airflow task to extract currency data and analyze arbitrage opportunities.
+    """
+    try:
+        # Fetch currency data from POE Ninja API
+        url = f"{BASE_URL}/currencyoverview?league={LEAGUE}&type=Currency"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        json_data = response.json()
+        
+        # Analyze arbitrage opportunities
+        arbitrage_results = analyze_arbitrage_opportunities(json_data)
+        
+        # Format and print table
+        table_output = format_arbitrage_table(arbitrage_results)
+        print("\n" + "="*80)
+        print("PATH OF EXILE CURRENCY ARBITRAGE OPPORTUNITIES")
+        print("="*80)
+        print(table_output)
+        print("="*80)
+        
+        # Save results to database
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Create arbitrage opportunities table if it doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS poe_arbitrage_opportunities (
+                    id SERIAL PRIMARY KEY,
+                    currency_name VARCHAR(100) NOT NULL,
+                    currency_id INTEGER,
+                    buy_price_chaos DECIMAL(15,8),
+                    sell_price_chaos DECIMAL(15,8),
+                    spread_chaos DECIMAL(15,8),
+                    spread_percentage DECIMAL(8,4),
+                    listing_count_difference INTEGER,
+                    arbitrage_opportunity BOOLEAN,
+                    pay_listing_count INTEGER,
+                    receive_listing_count INTEGER,
+                    confidence_score INTEGER,
+                    is_low_confidence BOOLEAN DEFAULT FALSE,
+                    league VARCHAR(50) NOT NULL,
+                    extracted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Clear old data for today to avoid duplicates
+            cursor.execute("""
+                DELETE FROM poe_arbitrage_opportunities 
+                WHERE league = %s AND DATE(extracted_at) = CURRENT_DATE
+            """, (LEAGUE,))
+            
+            # Insert arbitrage results with proper error handling
+            successful_inserts = 0
+            for result in arbitrage_results:
+                try:
+                    # Validate currency_id is not None
+                    currency_id = result.get('currency_id')
+                    if currency_id is None:
+                        print(f"Warning: Skipping {result['currency_name']} - no valid currency_id")
+                        continue
+                    
+                    cursor.execute("""
+                        INSERT INTO poe_arbitrage_opportunities (
+                            currency_name, currency_id, buy_price_chaos, sell_price_chaos,
+                            spread_chaos, spread_percentage, listing_count_difference,
+                            arbitrage_opportunity, pay_listing_count, receive_listing_count,
+                            confidence_score, is_low_confidence, league
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        result['currency_name'], 
+                        int(currency_id),  # Ensure integer type
+                        Decimal(str(result['buy_price_chaos'])),
+                        Decimal(str(result['sell_price_chaos'])),
+                        Decimal(str(result['spread_chaos'])),
+                        Decimal(str(result['spread_percentage'])),
+                        result['listing_count_difference'], 
+                        result['arbitrage_opportunity'],
+                        result['pay_listing_count'], 
+                        result['receive_listing_count'],
+                        result['confidence_score'],
+                        result['is_low_confidence'],
+                        LEAGUE
+                    ))
+                    successful_inserts += 1
+                    
+                except Exception as insert_error:
+                    print(f"Error inserting {result['currency_name']}: {str(insert_error)}")
+                    continue
+            
+            conn.commit()
+            print(f"Successfully inserted {successful_inserts} arbitrage records into database")
+        
+        # Save to file for analysis
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = f"{OUTPUT_DIR}/arbitrage_analysis_{timestamp}.json"
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        
+        with open(output_file, 'w') as f:
+            json.dump({
+                'analysis_timestamp': timestamp,
+                'league': LEAGUE,
+                'total_opportunities': len([r for r in arbitrage_results if r['arbitrage_opportunity']]),
+                'total_currencies_analyzed': len(arbitrage_results),
+                'arbitrage_results': arbitrage_results,
+                'table_output': table_output
+            }, f, indent=2)
+        
+        log_extraction('arbitrage_analysis', 'success', len(arbitrage_results))
+        
+        return {
+            'total_opportunities': len([r for r in arbitrage_results if r['arbitrage_opportunity']]),
+            'total_analyzed': len(arbitrage_results),
+            'output_file': output_file
+        }
+        
+    except Exception as e:
+        error_msg = f"Arbitrage analysis failed: {str(e)}"
+        print(error_msg)
+        log_extraction('arbitrage_analysis', 'error', 0, error_msg)
+        raise
+
+# ============================================================================
 # TRANSFORMATION FUNCTIONS
 # ============================================================================
 
@@ -586,6 +969,8 @@ def transform_currency_to_analytics(**context) -> Dict[str, Any]:
                     extracted_at TIMESTAMP WITH TIME ZONE NOT NULL,
                     buy_price DECIMAL(15,8),
                     sell_price DECIMAL(15,8),
+                    chaos_buy_price DECIMAL(15,8),
+                    chaos_sell_price DECIMAL(15,8),
                     price_gap_absolute DECIMAL(15,8),
                     price_gap_percentage DECIMAL(8,4),
                     pay_count INTEGER,
@@ -638,6 +1023,8 @@ def transform_currency_to_analytics(**context) -> Dict[str, Any]:
                 # Extract data from trade_info JSONB
                 buy_price = trade_info.get('buy_price')
                 sell_price = trade_info.get('sell_price')
+                chaos_buy_price = trade_info.get('chaos_buy_price')
+                chaos_sell_price = trade_info.get('chaos_sell_price')
                 price_gap_absolute = trade_info.get('price_gap_absolute')
                 price_gap_percentage = trade_info.get('price_gap_percentage')
                 pay_count = trade_info.get('pay_count', 0)
@@ -681,7 +1068,7 @@ def transform_currency_to_analytics(**context) -> Dict[str, Any]:
                 cursor.execute("""
                     INSERT INTO poe_currency_analytics (
                         currency_data_id, currency_name, league, extracted_at,
-                        buy_price, sell_price, price_gap_absolute, price_gap_percentage,
+                        buy_price, sell_price, chaos_buy_price, chaos_sell_price, price_gap_absolute, price_gap_percentage,
                         pay_count, receive_count, pay_listing_count, receive_listing_count,
                         total_listing_count, pay_currency_id, receive_currency_id, currency_id,
                         trade_id, data_point_count, includes_secondary, low_confidence,
@@ -689,12 +1076,12 @@ def transform_currency_to_analytics(**context) -> Dict[str, Any]:
                         total_change_low_confidence_pay, total_change_low_confidence_receive,
                         liquidity_score, market_depth_score, volatility_index
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                 """, (
                     currency_data_id, currency_name, league, extracted_at,
-                    buy_price, sell_price, price_gap_absolute, price_gap_percentage,
+                    buy_price, sell_price, chaos_buy_price, chaos_sell_price, price_gap_absolute, price_gap_percentage,
                     pay_count, receive_count, pay_listing_count, receive_listing_count,
                     listing_count, pay_currency_id, receive_currency_id, currency_id,
                     trade_id, data_point_count, includes_secondary, low_confidence,
@@ -1075,6 +1462,13 @@ transform_gems_task = PythonOperator(
     dag=dag,
 )
 
+# Arbitrage analysis task
+arbitrage_analysis_task = PythonOperator(
+    task_id='extract_and_analyze_arbitrage',
+    python_callable=extract_and_analyze_arbitrage,
+    dag=dag,
+)
+
 # Final summary task
 market_summary_task = PythonOperator(
     task_id='create_market_summary',
@@ -1092,7 +1486,8 @@ setup_task >> [extract_currency_task, extract_gems_task, extract_cards_task, ext
 # Transformation tasks depend on their respective extraction tasks
 extract_currency_task >> transform_currency_task
 extract_currency_task >> transform_currency_analytics_task
+extract_currency_task >> arbitrage_analysis_task
 extract_gems_task >> transform_gems_task
 
 # Market summary depends on all transformation tasks
-[transform_currency_task, transform_currency_analytics_task, transform_gems_task] >> market_summary_task
+[transform_currency_task, transform_currency_analytics_task, transform_gems_task, arbitrage_analysis_task] >> market_summary_task

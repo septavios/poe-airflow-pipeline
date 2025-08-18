@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS poe_currency_analytics (
     -- Price data (extracted from trade_info)
     buy_price DECIMAL(15,8),
     sell_price DECIMAL(15,8),
+    chaos_buy_price DECIMAL(15,8),
+    chaos_sell_price DECIMAL(15,8),
     price_gap_absolute DECIMAL(15,8),
     price_gap_percentage DECIMAL(8,4),
     
