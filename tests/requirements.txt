@@ -1,0 +1,8 @@
+# Test dependencies
+pytest==7.4.0
+pytest-mock==3.11.1
+requests-mock==1.11.0
+pandas==2.0.3
+numpy==1.24.3
+psycopg2-binary==2.9.7
+apache-airflow==3.0.4

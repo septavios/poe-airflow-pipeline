@@ -81,7 +81,7 @@ The pipeline extracts data from poe.ninja API endpoints:
      ```
      Replace `your-secret-key-here` with the generated key.
    
-   - Update `POE_LEAGUE` to the current Path of Exile league (e.g., "Settlers", "Crucible").
+   - Update `POE_LEAGUE` to the current Path of Exile league (e.g., "mercenaries", "Settlers").
    
    **Optional Changes:**
    - Modify database credentials if you prefer different usernames/passwords
@@ -166,7 +166,7 @@ AIRFLOW__CORE__LOAD_EXAMPLES=false                     # Don't load example DAGs
 
 #### API Configuration
 ```bash
-POE_LEAGUE=Settlers           # Current Path of Exile league name
+POE_LEAGUE=mercenaries        # Current Path of Exile league name
 ```
 
 #### Dashboard Configuration
@@ -192,10 +192,12 @@ DASHBOARD_PORT=5001           # Port for the web dashboard
 
 ### League Configuration
 
-Update the league name in `dags/poe_unified_pipeline_dag.py`:
-```python
-LEAGUE = 'Settlers'  # Update to current league
+Update the league name in your `.env` file:
+```bash
+POE_LEAGUE=mercenaries  # Set to current league
 ```
+
+The DAG will automatically read this value from the environment variable. If not set, it defaults to 'Settlers'.
 
 ## 📈 DAG Overview
 
@@ -216,6 +218,55 @@ LEAGUE = 'Settlers'  # Update to current league
 - `generate_market_summary`: Overall market summary
 
 **Task Dependencies**: Extraction tasks run in parallel, followed by transformation tasks that depend on the extracted data.
+
+## 🚀 DAG Operations
+
+### Manual DAG Execution
+
+To manually trigger the POE unified pipeline DAG:
+
+```bash
+# Trigger the DAG manually
+docker exec poe_airflow-airflow-scheduler-1 airflow dags trigger poe_unified_pipeline
+```
+
+### Checking DAG Status
+
+**List recent DAG runs:**
+```bash
+# View recent DAG runs and their status
+docker exec poe_airflow-airflow-scheduler-1 airflow dags list-runs poe_unified_pipeline
+```
+
+**Check individual task status:**
+```bash
+# List all tasks in the DAG
+docker exec poe_airflow-airflow-scheduler-1 airflow tasks list poe_unified_pipeline
+
+# Check specific task logs (replace YYYY-MM-DD with actual date)
+docker exec poe_airflow-airflow-scheduler-1 airflow tasks log poe_unified_pipeline extract_currency_data YYYY-MM-DD 1
+```
+
+**Monitor data extraction:**
+```bash
+# Check database for latest extractions
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT extraction_type, status, records_processed, extracted_at FROM poe_extraction_log ORDER BY extracted_at DESC LIMIT 10;"
+
+# Check total records in currency table
+docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "SELECT COUNT(*) as total_records, MAX(extracted_at) as latest_extraction FROM poe_currency_data;"
+```
+
+**Access monitoring interfaces:**
+- **Airflow Web UI**: http://localhost:8080 (admin/admin)
+- **POE Dashboard**: http://localhost:5001
+- **Database**: localhost:5432 (airflow/airflow)
+
+### DAG Scheduling
+
+The DAG runs automatically every 6 hours. To modify the schedule:
+
+1. Edit the `schedule` parameter in `dags/poe_unified_pipeline_dag.py`
+2. Restart the Airflow services: `docker-compose restart`
 
 ## 🗄️ Database Schema
 
@@ -443,7 +494,7 @@ docker exec poe_airflow-airflow-scheduler-1 airflow tasks states-for-dag-run poe
 docker exec poe_airflow-airflow-scheduler-1 airflow tasks log poe_unified_pipeline fetch_currency_data $(date +%Y-%m-%d) 1
 
 # Check API connectivity
-docker exec poe_airflow-airflow-scheduler-1 curl -s "https://poe.ninja/api/data/currencyoverview?league=Settlers&type=Currency" | jq '.lines | length'
+docker exec poe_airflow-airflow-scheduler-1 curl -s "https://poe.ninja/api/data/currencyoverview?league=mercenaries&type=Currency" | jq '.lines | length'
 
 # Validate database schema
 docker exec poe_airflow-postgres-1 psql -U airflow -d airflow -c "\dt poe_*"

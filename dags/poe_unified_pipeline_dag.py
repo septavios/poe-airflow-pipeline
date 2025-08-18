@@ -34,7 +34,7 @@ dag = DAG(
 )
 
 # Configuration
-LEAGUE = 'Settlers'  # Current league - update as needed
+LEAGUE = os.getenv('POE_LEAGUE', 'Settlers')  # Read from environment variable, fallback to 'Settlers'
 BASE_URL = 'https://poe.ninja/api/data'
 DATA_DIR = '/opt/airflow/logs/poe_data'  # Store data in logs directory
 OUTPUT_DIR = '/opt/airflow/logs/poe_analytics'
