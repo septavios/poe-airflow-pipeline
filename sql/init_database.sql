@@ -4,6 +4,28 @@
 -- Create database (if using PostgreSQL)
 -- CREATE DATABASE poe_market_data;
 
+-- Leagues table to store available Path of Exile leagues
+CREATE TABLE IF NOT EXISTS poe_leagues (
+    id SERIAL PRIMARY KEY,
+    league_name VARCHAR(100) NOT NULL UNIQUE,
+    display_name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    start_date DATE,
+    end_date DATE,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default leagues
+INSERT INTO poe_leagues (league_name, display_name, is_active, description) VALUES
+('Necropolis', 'Necropolis', true, 'Necropolis Challenge League'),
+('Crucible', 'Crucible', false, 'Crucible Challenge League'),
+('Sanctum', 'Sanctum', false, 'Sanctum Challenge League'),
+('Kalandra', 'Kalandra', false, 'Lake of Kalandra Challenge League'),
+('mercenaries', 'Mercenaries', true, 'Mercenaries Challenge League')
+ON CONFLICT (league_name) DO NOTHING;
+
 -- Currency data table for tracking exchange rates over time
 CREATE TABLE IF NOT EXISTS poe_currency_data (
     id SERIAL PRIMARY KEY,
@@ -20,6 +42,7 @@ CREATE TABLE IF NOT EXISTS poe_currency_data (
     low_confidence BOOLEAN DEFAULT FALSE,
     listing_count INTEGER,
     data_hash VARCHAR(32),
+    league VARCHAR(50) NOT NULL,
     extracted_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -44,6 +67,7 @@ CREATE TABLE IF NOT EXISTS poe_skill_gems_data (
     listing_count INTEGER,
     corrupted BOOLEAN DEFAULT FALSE,
     data_hash VARCHAR(32),
+    league VARCHAR(50) NOT NULL,
     extracted_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -64,6 +88,7 @@ CREATE TABLE IF NOT EXISTS poe_divination_cards_data (
     listing_count INTEGER,
     stack_size INTEGER,
     data_hash VARCHAR(32),
+    league VARCHAR(50) NOT NULL,
     extracted_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -89,6 +114,7 @@ CREATE TABLE IF NOT EXISTS poe_unique_items_data (
     item_level INTEGER,
     corrupted BOOLEAN DEFAULT FALSE,
     data_hash VARCHAR(32),
+    league VARCHAR(50) NOT NULL,
     extracted_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -149,6 +175,10 @@ CREATE TABLE IF NOT EXISTS poe_extraction_log (
 );
 
 -- Create indexes for better query performance
+-- Leagues table indexes
+CREATE INDEX IF NOT EXISTS idx_poe_leagues_name ON poe_leagues(league_name);
+CREATE INDEX IF NOT EXISTS idx_poe_leagues_active ON poe_leagues(is_active);
+
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_extracted_at ON poe_currency_data(extracted_at);
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_name ON poe_currency_data(currency_name);
 CREATE INDEX IF NOT EXISTS idx_poe_currency_data_chaos_value ON poe_currency_data(chaos_value);
@@ -169,6 +199,18 @@ CREATE INDEX IF NOT EXISTS idx_poe_market_summary_date ON poe_market_summary(sum
 CREATE INDEX IF NOT EXISTS idx_poe_profit_opportunities_extracted_at ON poe_profit_opportunities(extracted_at);
 CREATE INDEX IF NOT EXISTS idx_poe_profit_opportunities_type ON poe_profit_opportunities(opportunity_type);
 CREATE INDEX IF NOT EXISTS idx_poe_extraction_log_extracted_at ON poe_extraction_log(extracted_at);
+
+-- League-specific indexes for filtering data by league
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_league ON poe_currency_data(league);
+CREATE INDEX IF NOT EXISTS idx_poe_skill_gems_data_league ON poe_skill_gems_data(league);
+CREATE INDEX IF NOT EXISTS idx_poe_divination_cards_data_league ON poe_divination_cards_data(league);
+CREATE INDEX IF NOT EXISTS idx_poe_unique_items_data_league ON poe_unique_items_data(league);
+
+-- Composite indexes for league + time-series queries
+CREATE INDEX IF NOT EXISTS idx_poe_currency_data_league_time ON poe_currency_data(league, extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_skill_gems_data_league_time ON poe_skill_gems_data(league, extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_divination_cards_data_league_time ON poe_divination_cards_data(league, extracted_at);
+CREATE INDEX IF NOT EXISTS idx_poe_unique_items_data_league_time ON poe_unique_items_data(league, extracted_at);
 
 -- Create views for common queries
 CREATE OR REPLACE VIEW latest_currency_prices AS

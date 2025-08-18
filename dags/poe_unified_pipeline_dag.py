@@ -120,8 +120,8 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                 for item in currency_data:
                     cur.execute("""
                         INSERT INTO poe_currency_data 
-                        (currency_name, chaos_value, details_id, count, listing_count, icon_url, trade_info, sparkline, low_confidence, extracted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (currency_name, chaos_value, details_id, count, listing_count, icon_url, trade_info, sparkline, low_confidence, league, extracted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         item['currency_name'],
                         item['chaos_value'],
@@ -132,6 +132,7 @@ def fetch_currency_data(**context) -> Dict[str, Any]:
                         json.dumps(item['trade_info']),
                         json.dumps(item['sparkline']),
                         item['low_confidence'],
+                        LEAGUE,
                         datetime.now()
                     ))
             conn.commit()
@@ -189,8 +190,8 @@ def fetch_skill_gems_data(**context) -> Dict[str, Any]:
                     cur.execute("""
                         INSERT INTO poe_skill_gems_data 
                         (gem_name, gem_type, chaos_value, divine_value, gem_level, gem_quality, corrupted, 
-                         variant, listing_count, count, details_id, icon_url, trade_info, sparkline, low_confidence, extracted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         variant, listing_count, count, details_id, icon_url, trade_info, sparkline, low_confidence, league, extracted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         item['gem_name'],
                         item['gem_type'],
@@ -207,6 +208,7 @@ def fetch_skill_gems_data(**context) -> Dict[str, Any]:
                         json.dumps(item['trade_info']),
                         json.dumps(item['sparkline']),
                         item['low_confidence'],
+                        LEAGUE,
                         datetime.now()
                     ))
             conn.commit()
@@ -260,8 +262,8 @@ def fetch_divination_cards_data(**context) -> Dict[str, Any]:
                     cur.execute("""
                         INSERT INTO poe_divination_cards_data 
                         (card_name, chaos_value, divine_value, stack_size, listing_count, count, 
-                         details_id, icon_url, trade_info, sparkline, low_confidence, extracted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         details_id, icon_url, trade_info, sparkline, low_confidence, league, extracted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         item['card_name'],
                         item['chaos_value'],
@@ -274,6 +276,7 @@ def fetch_divination_cards_data(**context) -> Dict[str, Any]:
                         json.dumps(item['trade_info']),
                         json.dumps(item['sparkline']),
                         item['low_confidence'],
+                        LEAGUE,
                         datetime.now()
                     ))
             conn.commit()
@@ -342,8 +345,8 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
                         INSERT INTO poe_unique_items_data 
                         (item_name, base_type, item_type, chaos_value, divine_value, exalted_value, 
                          links, item_level, variant, listing_count, count, details_id, 
-                         icon_url, trade_info, sparkline, low_confidence, corrupted, extracted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         icon_url, trade_info, sparkline, low_confidence, corrupted, league, extracted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         item['item_name'],
                         item['base_type'],
@@ -362,6 +365,7 @@ def fetch_unique_items_data(**context) -> Dict[str, Any]:
                         json.dumps(item['sparkline']),
                         item['low_confidence'],
                         item['corrupted'],
+                        LEAGUE,
                         datetime.now()
                     ))
             conn.commit()
@@ -393,8 +397,9 @@ def transform_currency_data(**context) -> Dict[str, Any]:
                 SELECT currency_name, chaos_value, listing_count, extracted_at
                 FROM poe_currency_data 
                 WHERE extracted_at >= NOW() - INTERVAL '2 hours'
+                  AND league = %s
                 ORDER BY extracted_at DESC
-            """, conn)
+            """, conn, params=[LEAGUE])
         
         if df.empty:
             print("No recent currency data found in database")
@@ -492,8 +497,9 @@ def transform_gems_data(**context) -> Dict[str, Any]:
                        listing_count, corrupted, extracted_at
                 FROM poe_skill_gems_data 
                 WHERE extracted_at >= NOW() - INTERVAL '2 hours'
+                  AND league = %s
                 ORDER BY extracted_at DESC
-            """, conn)
+            """, conn, params=[LEAGUE])
         
         if df.empty:
             print("No recent gems data found in database")

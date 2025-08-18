@@ -28,19 +28,17 @@ fi
 # Step 2: Clear Airflow metadata
 echo "🔧 Clearing Airflow metadata..."
 docker-compose exec -T postgres psql -U airflow -d airflow -c "
-TRUNCATE TABLE dag_run;
-TRUNCATE TABLE task_instance;
-TRUNCATE TABLE task_instance_history;
-TRUNCATE TABLE job;
-TRUNCATE TABLE log;
-TRUNCATE TABLE xcom;
-TRUNCATE TABLE rendered_task_instance_fields;
-TRUNCATE TABLE dag_run_note;
-TRUNCATE TABLE task_instance_note;
-TRUNCATE TABLE variable;
+TRUNCATE TABLE dag_run CASCADE;
+TRUNCATE TABLE task_instance CASCADE;
+TRUNCATE TABLE task_instance_history CASCADE;
+TRUNCATE TABLE job CASCADE;
+TRUNCATE TABLE log CASCADE;
+TRUNCATE TABLE xcom CASCADE;
+TRUNCATE TABLE rendered_task_instance_fields CASCADE;
+TRUNCATE TABLE dag_run_note CASCADE;
+TRUNCATE TABLE task_instance_note CASCADE;
+TRUNCATE TABLE variable CASCADE;
 DELETE FROM variable WHERE key LIKE '%poe%';
-
-
 " > /dev/null 2>&1
 
 if [ $? -eq 0 ]; then
@@ -69,6 +67,7 @@ SELECT
     (SELECT COUNT(*) FROM poe_divination_cards_data) as poe_cards,
     (SELECT COUNT(*) FROM poe_market_summary) as poe_summary,
     (SELECT COUNT(*) FROM poe_extraction_log) as poe_logs,
+
     (SELECT COUNT(*) FROM dag_run) as dag_runs,
     (SELECT COUNT(*) FROM task_instance) as task_instances;
 " -t 2>/dev/null | grep -E '^[[:space:]]*[0-9]')

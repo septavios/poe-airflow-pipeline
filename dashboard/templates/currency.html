@@ -26,6 +26,7 @@
                             <tr>
                                 <th>Currency</th>
                                 <th>Chaos Value</th>
+                                <th>Divine Value</th>
                                 <th>Count</th>
                                 <th>Confidence</th>
                                 <th>Price Trend</th>
@@ -44,6 +45,11 @@
                                 <td>
                                     <span class="badge bg-primary fs-6">
                                         {{ "%.2f"|format(item.chaos_value) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning fs-6">
+                                        {{ "%.2f"|format(item.divine_value) }}
                                     </span>
                                 </td>
                                 <td>{{ item.count or 'N/A' }}</td>
