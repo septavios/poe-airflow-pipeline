@@ -319,7 +319,7 @@ def arbitrage_opportunities():
     """Display arbitrage opportunities page"""
     try:
         # Get league from query parameter
-        league = request.args.get('league', 'mercenaries')
+        league = request.args.get('league', 'Mercenaries')
         
         # Fetch arbitrage opportunities data
         arbitrage_data = execute_query("""
@@ -372,7 +372,7 @@ def arbitrage_opportunities():
         return render_template('arbitrage.html', 
                              arbitrage_data=[], 
                              stats={},
-                             league='mercenaries')
+                             league='Mercenaries')
 
 @app.route('/market-summary')
 def market_summary():
@@ -442,7 +442,7 @@ def profit_chart_data():
 def arbitrage_chart_data():
     """API endpoint for arbitrage chart data"""
     try:
-        league = request.args.get('league', 'mercenaries')
+        league = request.args.get('league', 'Mercenaries')
         
         data = execute_query("""
             SELECT 

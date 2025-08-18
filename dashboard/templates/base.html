@@ -510,7 +510,7 @@
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="leagueDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-globe"></i> League: <span id="currentLeague">{{ request.args.get('league', 'mercenaries') }}</span>
+                            <i class="fas fa-globe"></i> League: <span id="currentLeague">{{ request.args.get('league', 'Mercenaries') }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="leagueDropdown" id="leagueDropdownMenu">
                             <!-- League options will be loaded dynamically -->
@@ -548,7 +548,7 @@
                 const response = await fetch('/api/leagues');
                 const leagues = await response.json();
                 const dropdownMenu = document.getElementById('leagueDropdownMenu');
-                const currentLeague = new URLSearchParams(window.location.search).get('league') || 'mercenaries';
+                const currentLeague = new URLSearchParams(window.location.search).get('league') || 'Mercenaries';
                 
                 // Clear existing items
                 dropdownMenu.innerHTML = '';
