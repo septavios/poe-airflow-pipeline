@@ -341,8 +341,8 @@ def market_summary():
 @app.route('/api/currency-chart')
 def currency_chart_data():
     """API endpoint for currency chart data"""
-    # Get league parameter, default to 'mercenaries'
-    league = request.args.get('league', 'mercenaries')
+    # Get league parameter, default to 'Mercenaries'
+    league = request.args.get('league', 'Mercenaries')
     
     query = """
         SELECT currency_name, chaos_value
